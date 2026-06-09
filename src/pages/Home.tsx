@@ -11,6 +11,7 @@ import {
   type LiveMatch, type Standing,
 } from '../services/footballApi';
 import type { Match } from '../data/matches';
+import { toPersianTeamName } from '../data/teamNames';
 
 type Tab = 'live' | 'upcoming' | 'finished' | 'recent';
 
@@ -20,11 +21,11 @@ function apiMatchToLocal(m: LiveMatch): Match {
   return {
     id: String(m.id),
     homeTeam: m.homeTeam.name,
-    homeTeamPersian: m.homeTeam.shortName || m.homeTeam.name,
+    homeTeamPersian: toPersianTeamName(m.homeTeam.shortName, m.homeTeam.name),
     homeTeamFlag: '',
     homeCrest: m.homeTeam.crest,
     awayTeam: m.awayTeam.name,
-    awayTeamPersian: m.awayTeam.shortName || m.awayTeam.name,
+    awayTeamPersian: toPersianTeamName(m.awayTeam.shortName, m.awayTeam.name),
     awayTeamFlag: '',
     awayCrest: m.awayTeam.crest,
     homeScore: m.score.fullTime.home ?? m.score.halfTime.home ?? 0,

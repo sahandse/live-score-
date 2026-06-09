@@ -37,9 +37,9 @@ export const clubTeams: Team[] = [
     stadium: 'Etihad Stadium', stadiumPersian: 'اتحاد استدیوم', type: 'club',
     players: [
       { id: 'haaland', name: 'Erling Haaland', persianName: 'ارلینگ هالاند', position: 'ST', persianPosition: 'مهاجم', number: 9, nationality: 'Norway', nationalityPersian: 'نروژ', flag: '🇳🇴', age: 24, goals: 27, assists: 5, rating: 9.1 },
-      { id: 'devbruyne', name: 'Kevin De Bruyne', persianName: 'کوین دبروینه', position: 'CM', persianPosition: 'هافبک', number: 17, nationality: 'Belgium', nationalityPersian: 'بلژیک', flag: '🇧🇪', age: 33, goals: 8, assists: 15, rating: 8.7 },
-      { id: 'rodri', name: 'Rodri', persianName: 'رودری', position: 'DM', persianPosition: 'هافبک دفاعی', number: 16, nationality: 'Spain', nationalityPersian: 'اسپانیا', flag: '🇪🇸', age: 28, goals: 4, assists: 8, rating: 8.9 },
-      { id: 'silva_b', name: 'Bernardo Silva', persianName: 'برناردو سیلوا', position: 'CM', persianPosition: 'هافبک', number: 20, nationality: 'Portugal', nationalityPersian: 'پرتغال', flag: '🇵🇹', age: 30, goals: 10, assists: 12, rating: 8.5 },
+      { id: 'gvardiol', name: 'Joško Gvardiol', persianName: 'یوشکو گواردیول', position: 'LB', persianPosition: 'مدافع چپ', number: 24, nationality: 'Croatia', nationalityPersian: 'کرواسی', flag: '🇭🇷', age: 23, goals: 8, assists: 6, rating: 8.5 },
+      { id: 'silva_b', name: 'Bernardo Silva', persianName: 'برناردو سیلوا', position: 'CM', persianPosition: 'هافبک', number: 20, nationality: 'Portugal', nationalityPersian: 'پرتغال', flag: '🇵🇹', age: 30, goals: 11, assists: 13, rating: 8.5 },
+      { id: 'savinho', name: 'Savinho', persianName: 'ساوینیو', position: 'RW', persianPosition: 'مهاجم راست', number: 26, nationality: 'Brazil', nationalityPersian: 'برزیل', flag: '🇧🇷', age: 21, goals: 12, assists: 10, rating: 8.3 },
       { id: 'ederson', name: 'Ederson', persianName: 'ادرسون', position: 'GK', persianPosition: 'دروازه‌بان', number: 31, nationality: 'Brazil', nationalityPersian: 'برزیل', flag: '🇧🇷', age: 31, goals: 0, assists: 0, rating: 8.3 },
     ]
   },
@@ -63,7 +63,7 @@ export const clubTeams: Team[] = [
       { id: 'vinicius', name: 'Vinicius Jr.', persianName: 'وینیسیوس جونیور', position: 'LW', persianPosition: 'مهاجم چپ', number: 7, nationality: 'Brazil', nationalityPersian: 'برزیل', flag: '🇧🇷', age: 24, goals: 23, assists: 10, rating: 9.0 },
       { id: 'mbappe', name: 'Kylian Mbappé', persianName: 'کیلیان امباپه', position: 'ST', persianPosition: 'مهاجم', number: 9, nationality: 'France', nationalityPersian: 'فرانسه', flag: '🇫🇷', age: 26, goals: 32, assists: 9, rating: 9.2 },
       { id: 'bellingham', name: 'Jude Bellingham', persianName: 'جود بلینگهام', position: 'CM', persianPosition: 'هافبک', number: 5, nationality: 'England', nationalityPersian: 'انگلستان', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', age: 21, goals: 18, assists: 12, rating: 9.1 },
-      { id: 'modric', name: 'Luka Modrić', persianName: 'لوکا مودریچ', position: 'CM', persianPosition: 'هافبک', number: 10, nationality: 'Croatia', nationalityPersian: 'کرواسی', flag: '🇭🇷', age: 39, goals: 5, assists: 10, rating: 8.2 },
+      { id: 'tchouameni', name: 'Aurélien Tchouaméni', persianName: 'اورلیان چوامنی', position: 'DM', persianPosition: 'هافبک دفاعی', number: 18, nationality: 'France', nationalityPersian: 'فرانسه', flag: '🇫🇷', age: 25, goals: 6, assists: 7, rating: 8.4 },
       { id: 'courtois', name: 'Thibaut Courtois', persianName: 'تیبو کورتوا', position: 'GK', persianPosition: 'دروازه‌بان', number: 1, nationality: 'Belgium', nationalityPersian: 'بلژیک', flag: '🇧🇪', age: 32, goals: 0, assists: 0, rating: 8.8 },
     ]
   },
@@ -85,7 +85,7 @@ export const clubTeams: Team[] = [
     stadium: 'Allianz Arena', stadiumPersian: 'آلیانز آرنا', type: 'club',
     players: [
       { id: 'kane', name: 'Harry Kane', persianName: 'هری کین', position: 'ST', persianPosition: 'مهاجم', number: 9, nationality: 'England', nationalityPersian: 'انگلستان', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', age: 31, goals: 36, assists: 8, rating: 9.0 },
-      { id: 'muller', name: 'Thomas Müller', persianName: 'توماس مولر', position: 'AM', persianPosition: 'هافبک تهاجمی', number: 25, nationality: 'Germany', nationalityPersian: 'آلمان', flag: '🇩🇪', age: 35, goals: 10, assists: 17, rating: 8.1 },
+      { id: 'gnabry', name: 'Serge Gnabry', persianName: 'سرژ گنابری', position: 'RW', persianPosition: 'مهاجم راست', number: 10, nationality: 'Germany', nationalityPersian: 'آلمان', flag: '🇩🇪', age: 30, goals: 14, assists: 9, rating: 8.2 },
       { id: 'musiala', name: 'Jamal Musiala', persianName: 'جمال موسیاله', position: 'AM', persianPosition: 'هافبک تهاجمی', number: 42, nationality: 'Germany', nationalityPersian: 'آلمان', flag: '🇩🇪', age: 21, goals: 20, assists: 15, rating: 8.9 },
       { id: 'neuer', name: 'Manuel Neuer', persianName: 'مانوئل نویر', position: 'GK', persianPosition: 'دروازه‌بان', number: 1, nationality: 'Germany', nationalityPersian: 'آلمان', flag: '🇩🇪', age: 39, goals: 0, assists: 0, rating: 8.0 },
       { id: 'kimmich', name: 'Joshua Kimmich', persianName: 'جوشوا کیمیش', position: 'DM', persianPosition: 'هافبک دفاعی', number: 6, nationality: 'Germany', nationalityPersian: 'آلمان', flag: '🇩🇪', age: 30, goals: 5, assists: 12, rating: 8.6 },
@@ -121,8 +121,8 @@ export const clubTeams: Team[] = [
     stadium: 'Anfield', stadiumPersian: 'انفیلد', type: 'club',
     players: [
       { id: 'salah', name: 'Mohamed Salah', persianName: 'محمد صلاح', position: 'RW', persianPosition: 'مهاجم راست', number: 11, nationality: 'Egypt', nationalityPersian: 'مصر', flag: '🇪🇬', age: 32, goals: 29, assists: 14, rating: 9.2 },
-      { id: 'nunez', name: 'Darwin Núñez', persianName: 'داروین نونز', position: 'ST', persianPosition: 'مهاجم', number: 9, nationality: 'Uruguay', nationalityPersian: 'اروگوئه', flag: '🇺🇾', age: 25, goals: 18, assists: 9, rating: 8.3 },
-      { id: 'szoboszlai', name: 'Dominik Szoboszlai', persianName: 'دومینیک سوبوزلای', position: 'CM', persianPosition: 'هافبک', number: 8, nationality: 'Hungary', nationalityPersian: 'مجارستان', flag: '🇭🇺', age: 23, goals: 10, assists: 13, rating: 8.4 },
+      { id: 'nunez', name: 'Darwin Núñez', persianName: 'داروین نونز', position: 'ST', persianPosition: 'مهاجم', number: 9, nationality: 'Uruguay', nationalityPersian: 'اروگوئه', flag: '🇺🇾', age: 26, goals: 20, assists: 10, rating: 8.4 },
+      { id: 'szoboszlai', name: 'Dominik Szoboszlai', persianName: 'دومینیک سوبوزلای', position: 'CM', persianPosition: 'هافبک', number: 8, nationality: 'Hungary', nationalityPersian: 'مجارستان', flag: '🇭🇺', age: 24, goals: 11, assists: 14, rating: 8.5 },
       { id: 'alisson', name: 'Alisson Becker', persianName: 'آلیسون بکر', position: 'GK', persianPosition: 'دروازه‌بان', number: 1, nationality: 'Brazil', nationalityPersian: 'برزیل', flag: '🇧🇷', age: 32, goals: 0, assists: 0, rating: 8.7 },
       { id: 'alexander_arnold', name: 'Trent Alexander-Arnold', persianName: 'ترنت الکساندر آرنولد', position: 'RB', persianPosition: 'مدافع راست', number: 66, nationality: 'England', nationalityPersian: 'انگلستان', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', age: 26, goals: 7, assists: 16, rating: 8.8 },
     ]
@@ -161,11 +161,12 @@ export const nationalTeams: Team[] = [
     stadium: 'Azadi Stadium', stadiumPersian: 'ورزشگاه آزادی',
     players: [
       { id: 'beiranvand', name: 'Alireza Beiranvand', persianName: 'علیرضا بیرانوند', position: 'GK', persianPosition: 'دروازه‌بان', number: 1, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 32, goals: 0, assists: 0, rating: 8.0 },
-      { id: 'taremi', name: 'Mehdi Taremi', persianName: 'مهدی طارمی', position: 'ST', persianPosition: 'مهاجم', number: 9, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 32, goals: 46, assists: 18, rating: 8.5 },
-      { id: 'azmoun', name: 'Sardar Azmoun', persianName: 'سردار آزمون', position: 'ST', persianPosition: 'مهاجم', number: 18, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 30, goals: 42, assists: 14, rating: 8.3 },
-      { id: 'ghoddos_nt', name: 'Saman Ghoddos', persianName: 'سامان قدوس', position: 'AM', persianPosition: 'هافبک تهاجمی', number: 10, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 30, goals: 10, assists: 12, rating: 7.9 },
-      { id: 'hajsafi', name: 'Ehsan Hajsafi', persianName: 'احسان حاج صفی', position: 'LB', persianPosition: 'مدافع چپ', number: 3, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 34, goals: 5, assists: 8, rating: 7.8 },
-      { id: 'pouraliganji', name: 'Roozbeh Cheshmi', persianName: 'روزبه چشمی', position: 'CB', persianPosition: 'مدافع مرکزی', number: 5, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 31, goals: 4, assists: 2, rating: 7.7 },
+      { id: 'taremi', name: 'Mehdi Taremi', persianName: 'مهدی طارمی', position: 'ST', persianPosition: 'مهاجم', number: 9, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 32, goals: 50, assists: 20, rating: 8.6 },
+      { id: 'azmoun', name: 'Sardar Azmoun', persianName: 'سردار آزمون', position: 'ST', persianPosition: 'مهاجم', number: 18, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 30, goals: 44, assists: 16, rating: 8.3 },
+      { id: 'jahanbakhsh', name: 'Alireza Jahanbakhsh', persianName: 'علیرضا جهانبخش', position: 'RW', persianPosition: 'مهاجم راست', number: 7, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 31, goals: 16, assists: 18, rating: 8.0 },
+      { id: 'hajsafi', name: 'Ehsan Hajsafi', persianName: 'احسان حاج صفی', position: 'LB', persianPosition: 'مدافع چپ', number: 3, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 35, goals: 5, assists: 9, rating: 7.8 },
+      { id: 'cheshmi', name: 'Roozbeh Cheshmi', persianName: 'روزبه چشمی', position: 'CB', persianPosition: 'مدافع مرکزی', number: 5, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 31, goals: 5, assists: 2, rating: 7.8 },
+      { id: 'karimi_ali', name: 'Ali Karimi', persianName: 'علی کریمی', position: 'LW', persianPosition: 'مهاجم چپ', number: 11, nationality: 'Iran', nationalityPersian: 'ایران', flag: '🇮🇷', age: 24, goals: 8, assists: 10, rating: 7.9 },
     ]
   },
   {
