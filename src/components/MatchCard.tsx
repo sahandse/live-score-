@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { Bell, BellOff } from 'lucide-react';
 import type { Match } from '../data/matches';
 import { useApp } from '../context/AppContext';
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export default function MatchCard({ match }: Props) {
+  const navigate = useNavigate();
   const { darkMode, addReminder, removeReminder, hasReminder } = useApp();
   const reminded = hasReminder(match.id);
 
@@ -43,22 +45,23 @@ export default function MatchCard({ match }: Props) {
       return <span className={`text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>پایان</span>;
     }
     return (
-      <div className="flex items-center gap-1">
-        <span className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{match.time}</span>
-      </div>
+      <span className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{match.time}</span>
     );
   };
 
   return (
-    <div className={`rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg cursor-pointer ${
-      match.status === 'live'
-        ? darkMode
-          ? 'bg-gray-900/80 border-emerald-900/60 shadow-emerald-950/30'
-          : 'bg-emerald-50 border-emerald-200'
-        : darkMode
-          ? 'bg-gray-900 border-gray-800'
-          : 'bg-white border-gray-200 shadow-sm'
-    }`}>
+    <div
+      onClick={() => navigate(`/match/${match.id}`)}
+      className={`rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg cursor-pointer ${
+        match.status === 'live'
+          ? darkMode
+            ? 'bg-gray-900/80 border-emerald-900/60 shadow-emerald-950/30'
+            : 'bg-emerald-50 border-emerald-200'
+          : darkMode
+            ? 'bg-gray-900 border-gray-800'
+            : 'bg-white border-gray-200 shadow-sm'
+      }`}
+    >
       {/* League row */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
@@ -69,7 +72,7 @@ export default function MatchCard({ match }: Props) {
           {statusBadge()}
           {match.status === 'upcoming' && (
             <button
-              onClick={(e) => { e.stopPropagation(); handleReminder(); }}
+              onClick={e => { e.stopPropagation(); handleReminder(); }}
               className={`p-1 rounded-lg transition-colors ${
                 reminded
                   ? 'text-emerald-500'
@@ -99,9 +102,7 @@ export default function MatchCard({ match }: Props) {
         <div className={`flex items-center gap-1 px-4 py-2 rounded-xl min-w-[80px] justify-center ${
           match.status === 'live'
             ? 'bg-gradient-to-r from-emerald-600 to-blue-600 shadow-lg'
-            : match.status === 'upcoming'
-              ? darkMode ? 'bg-gray-800' : 'bg-gray-100'
-              : darkMode ? 'bg-gray-800' : 'bg-gray-100'
+            : darkMode ? 'bg-gray-800' : 'bg-gray-100'
         }`}>
           {match.status === 'upcoming' ? (
             <span className={`text-sm font-bold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>vs</span>

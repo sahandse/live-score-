@@ -33,6 +33,35 @@ export interface LiveMatch {
   competition: { id: number; name: string; emblem: string; code: string };
 }
 
+export interface MatchGoal {
+  minute: number;
+  type: string;
+  team: { id: number; name: string };
+  scorer: { id: number; name: string } | null;
+  assist: { id: number; name: string } | null;
+}
+
+export interface MatchBooking {
+  minute: number;
+  team: { id: number; name: string };
+  player: { id: number; name: string } | null;
+  card: 'YELLOW' | 'RED' | 'YELLOW_RED';
+}
+
+export interface MatchSubstitution {
+  minute: number;
+  team: { id: number; name: string };
+  playerIn: { id: number; name: string } | null;
+  playerOut: { id: number; name: string } | null;
+}
+
+export interface LiveMatchDetail extends LiveMatch {
+  goals: MatchGoal[];
+  bookings: MatchBooking[];
+  substitutions: MatchSubstitution[];
+  referees: { id: number; name: string; nationality: string }[];
+}
+
 export interface Standing {
   position: number;
   team: { id: number; name: string; shortName: string; crest: string };
@@ -64,7 +93,6 @@ export interface ApiTeam {
   squad?: ApiPlayer[];
 }
 
-// Status translation
 export function translateStatus(status: string): { label: string; type: 'live' | 'upcoming' | 'finished' | 'halftime' } {
   switch (status) {
     case 'IN_PLAY': return { label: 'زنده', type: 'live' };
@@ -76,7 +104,6 @@ export function translateStatus(status: string): { label: string; type: 'live' |
   }
 }
 
-// Competition code to Persian name and flag
 export const competitionMap: Record<string, { name: string; flag: string }> = {
   PL:    { name: 'لیگ برتر انگلیس', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
   PD:    { name: 'لالیگا', flag: '🇪🇸' },
@@ -92,19 +119,87 @@ export const competitionMap: Record<string, { name: string; flag: string }> = {
   WC:    { name: 'جام جهانی', flag: '🌍' },
 };
 
-// Today's + live matches
+export const leagueIdToCompetition: Record<string, string> = {
+  epl: 'PL',
+  laliga: 'PD',
+  bundesliga: 'BL1',
+  seriea: 'SA',
+  ligue1: 'FL1',
+  ucl: 'CL',
+  uel: 'EL',
+  eredivisie: 'DED',
+  primeiraliga: 'PPL',
+};
+
+export type ZoneType = 'ucl' | 'uel' | 'uecl' | 'relegation_playoff' | 'relegation';
+
+export function getZoneType(code: string, position: number, total: number): ZoneType | null {
+  switch (code) {
+    case 'PL':
+      if (position <= 4) return 'ucl';
+      if (position === 5) return 'uel';
+      if (position === 6) return 'uecl';
+      if (position >= total - 2) return 'relegation';
+      return null;
+    case 'PD':
+    case 'SA':
+      if (position <= 4) return 'ucl';
+      if (position === 5) return 'uel';
+      if (position === 6) return 'uecl';
+      if (position >= total - 2) return 'relegation';
+      return null;
+    case 'BL1':
+      if (position <= 4) return 'ucl';
+      if (position === 5) return 'uel';
+      if (position === 6) return 'uecl';
+      if (position === total - 1) return 'relegation_playoff';
+      if (position >= total) return 'relegation';
+      return null;
+    case 'FL1':
+      if (position <= 3) return 'ucl';
+      if (position <= 5) return 'uel';
+      if (position === 6) return 'uecl';
+      if (position === total - 1) return 'relegation_playoff';
+      if (position >= total) return 'relegation';
+      return null;
+    default:
+      if (position <= 4) return 'ucl';
+      if (position >= total - 2) return 'relegation';
+      return null;
+  }
+}
+
+export function zoneColor(zone: ZoneType | null): string {
+  switch (zone) {
+    case 'ucl': return 'bg-emerald-500';
+    case 'uel': return 'bg-orange-500';
+    case 'uecl': return 'bg-sky-400';
+    case 'relegation_playoff': return 'bg-amber-500';
+    case 'relegation': return 'bg-red-500';
+    default: return 'bg-transparent';
+  }
+}
+
 export async function getLiveMatches(): Promise<LiveMatch[] | null> {
   const data = await fetchApi<{ matches: LiveMatch[] }>('/matches?status=IN_PLAY,PAUSED,TIMED,SCHEDULED');
   return data?.matches ?? null;
 }
 
-// Matches for a specific competition
+export async function getRecentMatches(): Promise<LiveMatch[] | null> {
+  const now = new Date();
+  const pastDate = new Date(now);
+  pastDate.setDate(now.getDate() - 4);
+  const from = pastDate.toISOString().split('T')[0];
+  const to = now.toISOString().split('T')[0];
+  const data = await fetchApi<{ matches: LiveMatch[] }>(`/matches?status=FINISHED&dateFrom=${from}&dateTo=${to}`);
+  return data?.matches ?? null;
+}
+
 export async function getCompetitionMatches(competitionCode: string): Promise<LiveMatch[] | null> {
   const data = await fetchApi<{ matches: LiveMatch[] }>(`/competitions/${competitionCode}/matches?status=IN_PLAY,PAUSED,SCHEDULED,FINISHED&limit=10`);
   return data?.matches ?? null;
 }
 
-// Standings for a competition
 export async function getStandings(competitionCode: string): Promise<Standing[] | null> {
   const data = await fetchApi<{ standings: { type: string; table: Standing[] }[] }>(
     `/competitions/${competitionCode}/standings`
@@ -114,12 +209,14 @@ export async function getStandings(competitionCode: string): Promise<Standing[] 
   return total?.table ?? null;
 }
 
-// Team with squad
+export async function getMatch(id: number): Promise<LiveMatchDetail | null> {
+  return fetchApi<LiveMatchDetail>(`/matches/${id}`);
+}
+
 export async function getTeam(teamId: number): Promise<ApiTeam | null> {
   return fetchApi<ApiTeam>(`/teams/${teamId}`);
 }
 
-// Top scorers
 export async function getTopScorers(competitionCode: string): Promise<{ player: ApiPlayer; team: ApiTeam; goals: number; assists: number }[] | null> {
   const data = await fetchApi<{
     scorers: { player: ApiPlayer; team: ApiTeam; goals: number; assists: number | null }[];

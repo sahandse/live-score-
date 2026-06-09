@@ -7,6 +7,7 @@ import Leagues from './pages/Leagues';
 import Teams from './pages/Teams';
 import Players from './pages/Players';
 import WorldCup from './pages/WorldCup';
+import MatchDetail from './pages/MatchDetail';
 
 function AppContent() {
   const { darkMode } = useApp();
@@ -21,6 +22,7 @@ function AppContent() {
           <Route path="/teams" element={<Teams />} />
           <Route path="/players" element={<Players />} />
           <Route path="/worldcup" element={<WorldCup />} />
+          <Route path="/match/:id" element={<MatchDetail />} />
         </Routes>
       </main>
     </div>
