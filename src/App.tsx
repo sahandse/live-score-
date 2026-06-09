@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import Header from './components/Header';
 import Navigation from './components/Navigation';
@@ -29,10 +29,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AppProvider>
         <AppContent />
       </AppProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
