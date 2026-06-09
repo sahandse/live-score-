@@ -1,7 +1,8 @@
 const BASE_URL = 'https://api.football-data.org/v4';
+const API_KEY = '20efc7393a344050afae389cb04938da';
 
 function getApiKey(): string {
-  return localStorage.getItem('football_api_key') || '';
+  return API_KEY;
 }
 
 async function fetchApi<T>(endpoint: string): Promise<T | null> {
@@ -127,13 +128,5 @@ export async function getTopScorers(competitionCode: string): Promise<{ player: 
 }
 
 export function hasApiKey(): boolean {
-  return !!localStorage.getItem('football_api_key');
-}
-
-export function setApiKey(key: string): void {
-  localStorage.setItem('football_api_key', key.trim());
-}
-
-export function removeApiKey(): void {
-  localStorage.removeItem('football_api_key');
+  return true;
 }
