@@ -3,9 +3,11 @@ export interface Match {
   homeTeam: string;
   homeTeamPersian: string;
   homeTeamFlag: string;
+  homeCrest?: string;
   awayTeam: string;
   awayTeamPersian: string;
   awayTeamFlag: string;
+  awayCrest?: string;
   homeScore: number;
   awayScore: number;
   status: 'live' | 'finished' | 'upcoming' | 'halftime';

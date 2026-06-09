@@ -86,7 +86,10 @@ export default function MatchCard({ match }: Props) {
       <div className="flex items-center justify-between gap-3">
         {/* Home team */}
         <div className="flex-1 flex flex-col items-end gap-1">
-          <span className="text-2xl">{match.homeTeamFlag}</span>
+          {match.homeCrest
+            ? <img src={match.homeCrest} alt="" className="w-9 h-9 object-contain" />
+            : <span className="text-2xl">{match.homeTeamFlag}</span>
+          }
           <span className={`text-sm font-semibold text-right ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
             {match.homeTeamPersian}
           </span>
@@ -113,7 +116,10 @@ export default function MatchCard({ match }: Props) {
 
         {/* Away team */}
         <div className="flex-1 flex flex-col items-start gap-1">
-          <span className="text-2xl">{match.awayTeamFlag}</span>
+          {match.awayCrest
+            ? <img src={match.awayCrest} alt="" className="w-9 h-9 object-contain" />
+            : <span className="text-2xl">{match.awayTeamFlag}</span>
+          }
           <span className={`text-sm font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
             {match.awayTeamPersian}
           </span>
