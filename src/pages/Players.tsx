@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Star, Search, Award } from 'lucide-react';
 import { clubTeams, nationalTeams, type Player } from '../data/teams';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
+import { searchPlayer } from '../services/sportsDbApi';
 
 interface ExtendedPlayer extends Player {
   teamName: string;
@@ -28,6 +29,8 @@ export default function Players() {
   const [search, setSearch] = useState('');
   const [posFilter, setPosFilter] = useState('all');
   const [sortBy, setSortBy] = useState<'goals' | 'assists' | 'rating'>('goals');
+  const [playerPhotos, setPlayerPhotos] = useState<Record<string, string>>({});
+  const fetchedRef = useRef(new Set<string>());
 
   const allPlayers: ExtendedPlayer[] = [...clubTeams, ...nationalTeams].flatMap(team =>
     team.players.map(p => ({
@@ -38,7 +41,6 @@ export default function Players() {
     }))
   );
 
-  // Remove duplicates by id
   const uniquePlayers = allPlayers.filter((p, idx) => allPlayers.findIndex(q => q.id === p.id) === idx);
 
   const filtered = uniquePlayers
@@ -55,6 +57,28 @@ export default function Players() {
       if (sortBy === 'assists') return (b.assists || 0) - (a.assists || 0);
       return (b.rating || 0) - (a.rating || 0);
     });
+
+  // Fetch photos for top 30 visible players
+  useEffect(() => {
+    let cancelled = false;
+    const toFetch = filtered.slice(0, 30).filter(p => !fetchedRef.current.has(p.name));
+
+    const fetchPhotos = async () => {
+      for (const player of toFetch) {
+        if (cancelled) break;
+        fetchedRef.current.add(player.name);
+        const info = await searchPlayer(player.name);
+        if (info && !cancelled) {
+          const photo = info.strCutout || info.strThumb || '';
+          if (photo) setPlayerPhotos(prev => ({ ...prev, [player.name]: photo }));
+        }
+        if (!cancelled) await new Promise(r => setTimeout(r, 120));
+      }
+    };
+
+    fetchPhotos();
+    return () => { cancelled = true; };
+  }, [search, posFilter, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const positions = ['all', 'GK', 'CB', 'LB', 'RB', 'DM', 'CM', 'AM', 'LW', 'RW', 'ST'];
   const posLabels: Record<string, string> = {
@@ -130,6 +154,7 @@ export default function Players() {
       <div className="space-y-2">
         {filtered.map((player, idx) => {
           const pos = positionColors[player.position] || positionColors.CM;
+          const photo = playerPhotos[player.name];
           return (
             <div key={`${player.id}_${idx}`} className={`flex items-center gap-3 p-4 rounded-2xl border transition-all hover:-translate-y-0.5 ${
               darkMode ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
@@ -139,10 +164,24 @@ export default function Players() {
                 idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-amber-600' : darkMode ? 'text-gray-700' : 'text-gray-300'
               }`}>{toPersian(idx + 1)}</span>
 
-              {/* Position badge */}
-              <span className={`text-xs font-black px-2 py-1 rounded-lg flex-shrink-0 ${pos.bg} ${pos.text}`}>
-                {player.position}
-              </span>
+              {/* Photo or position badge */}
+              {photo ? (
+                <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-gray-800">
+                  <img
+                    src={photo}
+                    alt={player.name}
+                    className="w-full h-full object-cover object-top"
+                    onError={e => {
+                      const parent = (e.target as HTMLImageElement).parentElement!;
+                      parent.innerHTML = `<span class="w-full h-full flex items-center justify-center text-xs font-black ${pos.bg} ${pos.text}">${player.position}</span>`;
+                    }}
+                  />
+                </div>
+              ) : (
+                <span className={`text-xs font-black px-2 py-1 rounded-lg flex-shrink-0 ${pos.bg} ${pos.text}`}>
+                  {player.position}
+                </span>
+              )}
 
               {/* Flag */}
               <span className="text-xl flex-shrink-0">{player.flag}</span>

@@ -57,8 +57,8 @@ export default function Home() {
     const [matches, recent, standings, scorers] = await Promise.all([
       getLiveMatches(),
       getRecentMatches(),
-      getStandings('PL'),
-      getTopScorers('PL'),
+      getStandings('eng.1'),
+      getTopScorers('eng.1'),
     ]);
     if (matches !== null) {
       setApiMatches(matches.map(apiMatchToLocal));

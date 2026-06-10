@@ -39,9 +39,12 @@ export default function MatchDetail() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchMatch = async (showSpinner = true) => {
-    if (!id || id.startsWith('m')) { setLoading(false); return; }
+    if (!id || !id.includes('~')) { setLoading(false); return; }
     if (showSpinner) setLoading(true); else setRefreshing(true);
-    const data = await getMatch(Number(id));
+    const tilde = id.indexOf('~');
+    const leagueCode = id.slice(0, tilde);
+    const eventId = parseInt(id.slice(tilde + 1), 10);
+    const data = await getMatch(eventId, leagueCode);
     setMatch(data);
     if (showSpinner) setLoading(false); else setRefreshing(false);
   };
