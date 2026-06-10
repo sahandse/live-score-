@@ -13,6 +13,9 @@ export default function MatchCard({ match }: Props) {
   const { darkMode, addReminder, removeReminder, hasReminder } = useApp();
   const reminded = hasReminder(match.id);
 
+  // URL format: {espnLeagueCode}~{eventId}  e.g. eng.1~668135042
+  const matchUrl = `/match/${match.leagueId ? `${match.leagueId}~${match.id}` : match.id}`;
+
   const handleReminder = () => {
     if (reminded) {
       removeReminder(match.id);
@@ -51,7 +54,7 @@ export default function MatchCard({ match }: Props) {
 
   return (
     <div
-      onClick={() => navigate(`/match/${match.id}`)}
+      onClick={() => navigate(matchUrl)}
       className={`rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg cursor-pointer ${
         match.status === 'live'
           ? darkMode
