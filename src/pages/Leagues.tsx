@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { Star, ChevronDown, ChevronUp, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { leagues } from '../data/leagues';
 import { clubTeams, nationalTeams } from '../data/teams';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
 import {
-  getStandings, getTopScorers, leagueIdToCompetition,
-  getZoneType, zoneColor,
-  type Standing, type ApiPlayer, type ApiTeam,
+  getStandings, getTopScorers, getCompetitionMatches, leagueIdToCompetition,
+  getZoneType, zoneColor, translateStatus,
+  type Standing, type ApiPlayer, type ApiTeam, type LiveMatch,
 } from '../services/footballApi';
 
-type LeagueTab = 'standings' | 'scorers' | 'teams';
+type LeagueTab = 'standings' | 'scorers' | 'teams' | 'matches';
 
 type LeagueData = {
   standings: Standing[] | null;
   scorers: { player: ApiPlayer; team: ApiTeam; goals: number; assists: number }[] | null;
+  matches: LiveMatch[] | null;
   loaded: boolean;
 };
 
@@ -28,6 +30,7 @@ const zoneLabel: Record<string, string> = {
 
 export default function Leagues() {
   const { darkMode, isFavorite, toggleFavorite } = useApp();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<'all' | 'club' | 'international'>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Record<string, LeagueTab>>({});
@@ -48,11 +51,12 @@ export default function Leagues() {
     if (!code) return;
 
     setLoading(prev => ({ ...prev, [leagueId]: true }));
-    const [standings, scorers] = await Promise.all([
+    const [standings, scorers, matches] = await Promise.all([
       getStandings(code),
       getTopScorers(code),
+      getCompetitionMatches(code),
     ]);
-    setLeagueData(prev => ({ ...prev, [leagueId]: { standings, scorers, loaded: true } }));
+    setLeagueData(prev => ({ ...prev, [leagueId]: { standings, scorers, matches, loaded: true } }));
     setLoading(prev => ({ ...prev, [leagueId]: false }));
 
     if (standings) {
@@ -103,9 +107,11 @@ export default function Leagues() {
           const standings = data?.standings;
           const scorers = data?.scorers;
 
+          const matches = data?.matches;
           const tabs: { key: LeagueTab; label: string }[] = [
             ...(code ? [{ key: 'standings' as LeagueTab, label: 'جدول' }] : []),
             ...(code ? [{ key: 'scorers' as LeagueTab, label: 'گلزنان' }] : []),
+            ...(code ? [{ key: 'matches' as LeagueTab, label: 'بازی‌ها' }] : []),
             ...(teams.length > 0 ? [{ key: 'teams' as LeagueTab, label: 'تیم‌ها' }] : []),
           ];
 
@@ -289,6 +295,87 @@ export default function Leagues() {
                                   </div>
                                 </div>
                               ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Matches tab */}
+                      {tab === 'matches' && (
+                        <div>
+                          {!matches || matches.length === 0 ? (
+                            <p className={`text-center py-6 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                              بازی‌ای یافت نشد
+                            </p>
+                          ) : (
+                            <div className="divide-y divide-gray-100/10">
+                              {matches.map((m, i) => {
+                                const { type: sType } = translateStatus(m.status);
+                                const homeScore = m.score.fullTime.home ?? m.score.halfTime.home;
+                                const awayScore = m.score.fullTime.away ?? m.score.halfTime.away;
+                                const matchUrl = `/match/${code}~${m.id}`;
+                                const timeStr = new Date(m.utcDate).toLocaleTimeString('fa-IR', {
+                                  hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran',
+                                });
+                                const dateStr = new Date(m.utcDate).toLocaleDateString('fa-IR', {
+                                  month: 'short', day: 'numeric', timeZone: 'Asia/Tehran',
+                                });
+                                return (
+                                  <div
+                                    key={i}
+                                    onClick={() => navigate(matchUrl)}
+                                    className={`flex items-center gap-2 px-3 py-3 cursor-pointer transition-colors ${
+                                      darkMode ? 'hover:bg-gray-800/40' : 'hover:bg-gray-50'
+                                    } ${sType === 'live' ? darkMode ? 'bg-emerald-950/30' : 'bg-emerald-50/60' : ''}`}
+                                  >
+                                    {/* Home team */}
+                                    <div className="flex-1 flex items-center justify-end gap-1.5 min-w-0">
+                                      <span className={`text-xs font-semibold truncate text-right ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                                        {m.homeTeam.shortName || m.homeTeam.name}
+                                      </span>
+                                      {m.homeTeam.crest
+                                        ? <img src={m.homeTeam.crest} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
+                                        : <span className="text-base">🏠</span>
+                                      }
+                                    </div>
+
+                                    {/* Score / time */}
+                                    <div className="flex flex-col items-center min-w-[64px]">
+                                      {sType === 'upcoming' ? (
+                                        <>
+                                          <span className={`text-xs font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{timeStr}</span>
+                                          <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{dateStr}</span>
+                                        </>
+                                      ) : sType === 'live' ? (
+                                        <div className="flex items-center gap-1">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 live-pulse" />
+                                          <span className={`text-sm font-black tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                                            {toPersian(homeScore ?? 0)}-{toPersian(awayScore ?? 0)}
+                                          </span>
+                                          <span className="text-red-400 text-xs">{toPersian(m.minute ?? 0)}′</span>
+                                        </div>
+                                      ) : (
+                                        <span className={`text-sm font-black tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                                          {toPersian(homeScore ?? 0)}-{toPersian(awayScore ?? 0)}
+                                        </span>
+                                      )}
+                                      {sType === 'halftime' && <span className="text-amber-400 text-xs">نیمه</span>}
+                                      {sType === 'finished' && <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>پایان</span>}
+                                    </div>
+
+                                    {/* Away team */}
+                                    <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                                      {m.awayTeam.crest
+                                        ? <img src={m.awayTeam.crest} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
+                                        : <span className="text-base">✈️</span>
+                                      }
+                                      <span className={`text-xs font-semibold truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                                        {m.awayTeam.shortName || m.awayTeam.name}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>

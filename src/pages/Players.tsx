@@ -24,6 +24,8 @@ const positionColors: Record<string, { bg: string; text: string; label: string }
   ST: { bg: 'bg-red-500/15', text: 'text-red-400', label: 'مهاجم' },
 };
 
+const PODIUM_SORTS = ['goals', 'assists', 'rating'] as const;
+
 export default function Players() {
   const { darkMode, isFavorite, toggleFavorite } = useApp();
   const [search, setSearch] = useState('');
@@ -85,11 +87,77 @@ export default function Players() {
     all: 'همه', GK: 'GK', CB: 'CB', LB: 'LB', RB: 'RB', DM: 'DM', CM: 'CM', AM: 'AM', LW: 'LW', RW: 'RW', ST: 'ST'
   };
 
+  // Computed max values for progress bars
+  const maxGoals = Math.max(1, ...uniquePlayers.map(p => p.goals || 0));
+  const maxAssists = Math.max(1, ...uniquePlayers.map(p => p.assists || 0));
+
+  // Stats summary
+  const topScorer = [...uniquePlayers].sort((a, b) => (b.goals || 0) - (a.goals || 0))[0];
+  const topAssister = [...uniquePlayers].sort((a, b) => (b.assists || 0) - (a.assists || 0))[0];
+  const topRated = [...uniquePlayers].sort((a, b) => (b.rating || 0) - (a.rating || 0))[0];
+
+  // Podium: shown when sorted by goals/assists/rating and >=3 players in filtered
+  const showPodium = PODIUM_SORTS.includes(sortBy) && filtered.length >= 3;
+  const podiumPlayers = filtered.slice(0, 3); // [0]=1st, [1]=2nd, [2]=3rd
+  // Reorder for display: 2nd | 1st | 3rd
+  const podiumOrder = [podiumPlayers[1], podiumPlayers[0], podiumPlayers[2]];
+  const podiumBaseHeights = [112, 144, 96]; // px for 2nd, 1st, 3rd
+  const podiumColors = ['text-gray-400', 'text-yellow-400', 'text-amber-600'];
+  const podiumBgColors = ['bg-gray-400/10', 'bg-yellow-400/10', 'bg-amber-600/10'];
+  const podiumBorderColors = ['border-gray-400/30', 'border-yellow-400/30', 'border-amber-600/30'];
+  const podiumMedals = ['🥈', '🥇', '🥉'];
+  const podiumRanks = [2, 1, 3]; // actual rank of each column
+
+  const getStatValue = (player: ExtendedPlayer) => {
+    if (sortBy === 'goals') return `${toPersian(player.goals || 0)} گل`;
+    if (sortBy === 'assists') return `${toPersian(player.assists || 0)} پاس گل`;
+    return `${(player.rating || 0).toFixed(1)}`;
+  };
+
+  const listPlayers = showPodium ? filtered.slice(3) : filtered;
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6">
       <div className="flex items-center justify-between mb-5">
         <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>بازیکنان</h2>
         <span className={`text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{toPersian(filtered.length)} بازیکن</span>
+      </div>
+
+      {/* Stats summary bar */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border ${
+          darkMode ? 'bg-gray-900 border-gray-800 text-gray-300' : 'bg-white border-gray-200 text-gray-600 shadow-sm'
+        }`}>
+          <span>👥</span>
+          <span>{toPersian(uniquePlayers.length)} بازیکن</span>
+        </div>
+        {topScorer && (
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border ${
+            darkMode ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300' : 'bg-yellow-50 border-yellow-200 text-yellow-700'
+          }`}>
+            <span>⚽</span>
+            <span>{topScorer.persianName}</span>
+            <span className="font-black">{toPersian(topScorer.goals || 0)}</span>
+          </div>
+        )}
+        {topAssister && (
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border ${
+            darkMode ? 'bg-blue-500/10 border-blue-500/20 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-700'
+          }`}>
+            <span>🎯</span>
+            <span>{topAssister.persianName}</span>
+            <span className="font-black">{toPersian(topAssister.assists || 0)}</span>
+          </div>
+        )}
+        {topRated && topRated.rating && (
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border ${
+            darkMode ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+          }`}>
+            <span>⭐</span>
+            <span>{topRated.persianName}</span>
+            <span className="font-black">{topRated.rating.toFixed(1)}</span>
+          </div>
+        )}
       </div>
 
       {/* Search */}
@@ -150,23 +218,103 @@ export default function Players() {
         ))}
       </div>
 
+      {/* Top 3 Podium */}
+      {showPodium && (
+        <div className={`rounded-2xl border p-4 mb-5 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <p className={`text-center text-xs font-bold mb-4 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+            برترین بازیکنان
+          </p>
+          <div className="flex items-end justify-center gap-3">
+            {podiumOrder.map((player, colIdx) => {
+              if (!player) return null;
+              const photo = playerPhotos[player.name];
+              const rank = podiumRanks[colIdx];
+              const baseH = podiumBaseHeights[colIdx];
+              const colorClass = podiumColors[colIdx];
+              const bgClass = podiumBgColors[colIdx];
+              const borderClass = podiumBorderColors[colIdx];
+              const medal = podiumMedals[colIdx];
+              const pos = positionColors[player.position] || positionColors.CM;
+
+              return (
+                <div key={player.id} className="flex flex-col items-center flex-1 max-w-[110px]">
+                  {/* Player card above podium base */}
+                  <div className="flex flex-col items-center mb-2 w-full">
+                    {/* Medal */}
+                    <span className="text-2xl mb-1">{medal}</span>
+                    {/* Photo */}
+                    <div className={`w-12 h-12 rounded-full overflow-hidden border-2 ${borderClass} mb-1 flex-shrink-0 ${bgClass}`}>
+                      {photo ? (
+                        <img
+                          src={photo}
+                          alt={player.name}
+                          className="w-full h-full object-cover object-top"
+                          onError={e => {
+                            const el = e.target as HTMLImageElement;
+                            el.style.display = 'none';
+                            const parent = el.parentElement!;
+                            const span = document.createElement('span');
+                            span.className = `w-full h-full flex items-center justify-center text-xs font-black ${pos.text}`;
+                            span.textContent = player.position;
+                            parent.appendChild(span);
+                          }}
+                        />
+                      ) : (
+                        <span className={`w-full h-full flex items-center justify-center text-xs font-black ${pos.text}`}>
+                          {player.position}
+                        </span>
+                      )}
+                    </div>
+                    {/* Flag */}
+                    <span className="text-base mb-0.5">{player.flag}</span>
+                    {/* Name */}
+                    <p className={`text-xs font-bold text-center truncate w-full px-1 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                      {player.persianName}
+                    </p>
+                    {/* Team */}
+                    <p className={`text-xs text-center truncate w-full px-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                      {player.teamPersian}
+                    </p>
+                    {/* Stat value */}
+                    <p className={`text-sm font-black mt-1 ${colorClass}`}>
+                      {getStatValue(player)}
+                    </p>
+                  </div>
+                  {/* Podium base */}
+                  <div
+                    className={`w-full rounded-t-xl flex items-center justify-center border-t-2 border-x-2 ${bgClass} ${borderClass}`}
+                    style={{ height: `${baseH}px` }}
+                  >
+                    <span className={`text-2xl font-black ${colorClass}`}>{toPersian(rank)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Players list */}
       <div className="space-y-2">
-        {filtered.map((player, idx) => {
+        {listPlayers.map((player, idx) => {
+          const actualIdx = showPodium ? idx + 3 : idx;
           const pos = positionColors[player.position] || positionColors.CM;
           const photo = playerPhotos[player.name];
+          const goalsBar = ((player.goals || 0) / maxGoals) * 100;
+          const assistsBar = ((player.assists || 0) / maxAssists) * 100;
+
           return (
-            <div key={`${player.id}_${idx}`} className={`flex items-center gap-3 p-4 rounded-2xl border transition-all hover:-translate-y-0.5 ${
+            <div key={`${player.id}_${actualIdx}`} className={`flex items-center gap-3 p-4 rounded-2xl border transition-all hover:-translate-y-0.5 ${
               darkMode ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
             }`}>
               {/* Rank */}
               <span className={`text-sm font-black w-6 text-center flex-shrink-0 ${
-                idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-amber-600' : darkMode ? 'text-gray-700' : 'text-gray-300'
-              }`}>{toPersian(idx + 1)}</span>
+                actualIdx === 0 ? 'text-yellow-400' : actualIdx === 1 ? 'text-gray-400' : actualIdx === 2 ? 'text-amber-600' : darkMode ? 'text-gray-700' : 'text-gray-300'
+              }`}>{toPersian(actualIdx + 1)}</span>
 
               {/* Photo or position badge */}
               {photo ? (
-                <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-gray-800">
+                <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-gray-800 border border-gray-700">
                   <img
                     src={photo}
                     alt={player.name}
@@ -178,9 +326,11 @@ export default function Players() {
                   />
                 </div>
               ) : (
-                <span className={`text-xs font-black px-2 py-1 rounded-lg flex-shrink-0 ${pos.bg} ${pos.text}`}>
-                  {player.position}
-                </span>
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${pos.bg}`}>
+                  <span className={`text-xs font-black ${pos.text}`}>
+                    {player.position}
+                  </span>
+                </div>
               )}
 
               {/* Flag */}
@@ -191,7 +341,7 @@ export default function Players() {
                 <p className={`font-bold text-sm truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
                   {player.persianName}
                 </p>
-                <div className="flex items-center gap-1.5 mt-0.5">
+                <div className="flex items-center gap-1.5 mt-0.5 mb-1.5">
                   <span className="text-sm">{player.teamFlag}</span>
                   <span className={`text-xs truncate ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                     {player.teamPersian}
@@ -201,6 +351,33 @@ export default function Players() {
                     {toPersian(player.age)} ساله
                   </span>
                 </div>
+                {/* Progress bars */}
+                {(player.goals !== undefined || player.assists !== undefined) && (
+                  <div className="flex flex-col gap-1">
+                    {player.goals !== undefined && (
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs w-4 text-center ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>⚽</span>
+                        <div className={`flex-1 h-[2px] rounded-full ${darkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
+                          <div
+                            className="h-full rounded-full bg-emerald-500"
+                            style={{ width: `${goalsBar}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {player.assists !== undefined && (
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs w-4 text-center ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>🎯</span>
+                        <div className={`flex-1 h-[2px] rounded-full ${darkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
+                          <div
+                            className="h-full rounded-full bg-blue-500"
+                            style={{ width: `${assistsBar}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Stats */}
