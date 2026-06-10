@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Star, ChevronDown, ChevronUp, Globe } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Star, ChevronDown, ChevronUp, Globe, Trophy, Shield, ArrowRight } from 'lucide-react';
 import { nationalTeams } from '../data/teams';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
@@ -68,6 +68,7 @@ const allWCTeams = [
 ];
 
 // WC 2026 Groups (16 groups × 3 teams)
+// NOTE: Group P uses switzerland/austria/ghana — egypt is already in Group E
 const wcGroups: { label: string; teams: string[] }[] = [
   { label: 'گروه A', teams: ['usa', 'panama', 'albania'] },
   { label: 'گروه B', teams: ['mexico', 'poland', 'cameroon'] },
@@ -84,14 +85,14 @@ const wcGroups: { label: string; teams: string[] }[] = [
   { label: 'گروه M', teams: ['belgium', 'jordan', 'new_zealand'] },
   { label: 'گروه N', teams: ['japan', 'serbia', 'ecuador'] },
   { label: 'گروه O', teams: ['turkey', 'mali', 'honduras'] },
-  { label: 'گروه P', teams: ['switzerland', 'austria', 'egypt'] },
+  { label: 'گروه P', teams: ['switzerland', 'austria', 'ghana'] },
 ];
 
 // Additional teams for groups that reference IDs not in main list
 const extraTeams: Record<string, { name: string; flag: string }> = {
-  albania: { name: 'آلبانی', flag: '🇦🇱' },
-  chile: { name: 'شیلی', flag: '🇨🇱' },
-  ghana: { name: 'غنا', flag: '🇬🇭' },
+  albania: { name: 'آلبانی',   flag: '🇦🇱' },
+  chile:   { name: 'شیلی',    flag: '🇨🇱' },
+  ghana:   { name: 'غنا',     flag: '🇬🇭' },
 };
 
 const confederations = [
@@ -104,39 +105,170 @@ const confederations = [
   { id: 'OFC',      name: 'OFC',      count: allWCTeams.filter(t => t.conf === 'OFC').length },
 ];
 
+const confColors: Record<string, string> = {
+  UEFA:     'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  CONMEBOL: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  AFC:      'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  CAF:      'bg-red-500/20 text-red-400 border-red-500/30',
+  CONCACAF: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  OFC:      'bg-purple-500/20 text-purple-400 border-purple-500/30',
+};
+
 const prevWinners = [
-  { year: 2022, champion: 'آرژانتین', flag: '🇦🇷', runner: 'فرانسه',  runnerFlag: '🇫🇷', venue: 'قطر',               score: '3-3 (پنالتی)' },
-  { year: 2018, champion: 'فرانسه',   flag: '🇫🇷', runner: 'کرواسی',  runnerFlag: '🇭🇷', venue: 'روسیه',             score: '4-2' },
-  { year: 2014, champion: 'آلمان',    flag: '🇩🇪', runner: 'آرژانتین',runnerFlag: '🇦🇷', venue: 'برزیل',             score: '1-0 (وقت اضافه)' },
-  { year: 2010, champion: 'اسپانیا',  flag: '🇪🇸', runner: 'هلند',    runnerFlag: '🇳🇱', venue: 'آفریقای جنوبی',    score: '1-0 (وقت اضافه)' },
-  { year: 2006, champion: 'ایتالیا',  flag: '🇮🇹', runner: 'فرانسه',  runnerFlag: '🇫🇷', venue: 'آلمان',             score: '1-1 (پنالتی)' },
-  { year: 2002, champion: 'برزیل',    flag: '🇧🇷', runner: 'آلمان',   runnerFlag: '🇩🇪', venue: 'کره/ژاپن',         score: '2-0' },
-  { year: 1998, champion: 'فرانسه',   flag: '🇫🇷', runner: 'برزیل',   runnerFlag: '🇧🇷', venue: 'فرانسه',            score: '3-0' },
-  { year: 1994, champion: 'برزیل',    flag: '🇧🇷', runner: 'ایتالیا', runnerFlag: '🇮🇹', venue: 'آمریکا',            score: '0-0 (پنالتی)' },
+  { year: 2022, champion: 'آرژانتین',    flag: '🇦🇷', runner: 'فرانسه',        runnerFlag: '🇫🇷', venue: 'قطر',              score: '۳-۳ (پنالتی)' },
+  { year: 2018, champion: 'فرانسه',      flag: '🇫🇷', runner: 'کرواسی',        runnerFlag: '🇭🇷', venue: 'روسیه',            score: '۴-۲' },
+  { year: 2014, champion: 'آلمان',       flag: '🇩🇪', runner: 'آرژانتین',      runnerFlag: '🇦🇷', venue: 'برزیل',            score: '۱-۰ و.ا.' },
+  { year: 2010, champion: 'اسپانیا',     flag: '🇪🇸', runner: 'هلند',          runnerFlag: '🇳🇱', venue: 'آفریقای جنوبی',   score: '۱-۰ و.ا.' },
+  { year: 2006, champion: 'ایتالیا',     flag: '🇮🇹', runner: 'فرانسه',        runnerFlag: '🇫🇷', venue: 'آلمان',            score: '۱-۱ (پنالتی)' },
+  { year: 2002, champion: 'برزیل',       flag: '🇧🇷', runner: 'آلمان',         runnerFlag: '🇩🇪', venue: 'کره/ژاپن',        score: '۲-۰' },
+  { year: 1998, champion: 'فرانسه',      flag: '🇫🇷', runner: 'برزیل',         runnerFlag: '🇧🇷', venue: 'فرانسه',           score: '۳-۰' },
+  { year: 1994, champion: 'برزیل',       flag: '🇧🇷', runner: 'ایتالیا',       runnerFlag: '🇮🇹', venue: 'آمریکا',           score: '۰-۰ (پنالتی)' },
+  { year: 1990, champion: 'آلمان غربی',  flag: '🇩🇪', runner: 'آرژانتین',      runnerFlag: '🇦🇷', venue: 'ایتالیا',          score: '۱-۰' },
+  { year: 1986, champion: 'آرژانتین',    flag: '🇦🇷', runner: 'آلمان غربی',    runnerFlag: '🇩🇪', venue: 'مکزیک',            score: '۳-۲' },
+  { year: 1982, champion: 'ایتالیا',     flag: '🇮🇹', runner: 'آلمان غربی',    runnerFlag: '🇩🇪', venue: 'اسپانیا',          score: '۳-۱' },
+  { year: 1978, champion: 'آرژانتین',    flag: '🇦🇷', runner: 'هلند',          runnerFlag: '🇳🇱', venue: 'آرژانتین',         score: '۳-۱ و.ا.' },
+  { year: 1974, champion: 'آلمان غربی',  flag: '🇩🇪', runner: 'هلند',          runnerFlag: '🇳🇱', venue: 'آلمان',            score: '۲-۱' },
+  { year: 1970, champion: 'برزیل',       flag: '🇧🇷', runner: 'ایتالیا',       runnerFlag: '🇮🇹', venue: 'مکزیک',            score: '۴-۱' },
+  { year: 1966, champion: 'انگلستان',    flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', runner: 'آلمان غربی',    runnerFlag: '🇩🇪', venue: 'انگلستان',         score: '۴-۲ و.ا.' },
+  { year: 1962, champion: 'برزیل',       flag: '🇧🇷', runner: 'چکسلواکی',      runnerFlag: '🇨🇿', venue: 'شیلی',             score: '۳-۱' },
+  { year: 1958, champion: 'برزیل',       flag: '🇧🇷', runner: 'سوئد',          runnerFlag: '🇸🇪', venue: 'سوئد',             score: '۵-۲' },
+  { year: 1954, champion: 'آلمان غربی',  flag: '🇩🇪', runner: 'مجارستان',      runnerFlag: '🇭🇺', venue: 'سوئیس',            score: '۳-۲' },
+  { year: 1950, champion: 'اروگوئه',     flag: '🇺🇾', runner: 'برزیل',         runnerFlag: '🇧🇷', venue: 'برزیل',            score: '۲-۱' },
+  { year: 1938, champion: 'ایتالیا',     flag: '🇮🇹', runner: 'مجارستان',      runnerFlag: '🇭🇺', venue: 'فرانسه',           score: '۴-۲' },
+  { year: 1934, champion: 'ایتالیا',     flag: '🇮🇹', runner: 'چکسلواکی',      runnerFlag: '🇨🇿', venue: 'ایتالیا',          score: '۲-۱ و.ا.' },
+  { year: 1930, champion: 'اروگوئه',     flag: '🇺🇾', runner: 'آرژانتین',      runnerFlag: '🇦🇷', venue: 'اروگوئه',          score: '۴-۲' },
 ];
 
+const wcStats = [
+  { country: 'برزیل',     flag: '🇧🇷', wins: 5 },
+  { country: 'آلمان',     flag: '🇩🇪', wins: 4 },
+  { country: 'ایتالیا',   flag: '🇮🇹', wins: 4 },
+  { country: 'آرژانتین',  flag: '🇦🇷', wins: 3 },
+  { country: 'فرانسه',    flag: '🇫🇷', wins: 2 },
+  { country: 'اروگوئه',   flag: '🇺🇾', wins: 2 },
+  { country: 'انگلستان',  flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', wins: 1 },
+  { country: 'اسپانیا',   flag: '🇪🇸', wins: 1 },
+];
+
+const bracketPhases = [
+  {
+    key: 'r32',
+    name: 'یک‌هشتم نهایی',
+    nameEn: 'Round of 32',
+    dates: '۴-۷ جولای',
+    matches: 16,
+    icon: Shield,
+    color: 'from-blue-600/20 to-blue-700/10 border-blue-700/40',
+    textColor: 'text-blue-400',
+  },
+  {
+    key: 'r16',
+    name: 'یک‌چهارم نهایی',
+    nameEn: 'Round of 16',
+    dates: '۹-۱۲ جولای',
+    matches: 8,
+    icon: Shield,
+    color: 'from-indigo-600/20 to-indigo-700/10 border-indigo-700/40',
+    textColor: 'text-indigo-400',
+  },
+  {
+    key: 'qf',
+    name: 'ربع‌نهایی',
+    nameEn: 'Quarter-finals',
+    dates: '۱۴-۱۵ جولای',
+    matches: 4,
+    icon: Shield,
+    color: 'from-violet-600/20 to-violet-700/10 border-violet-700/40',
+    textColor: 'text-violet-400',
+  },
+  {
+    key: 'sf',
+    name: 'نیمه‌نهایی',
+    nameEn: 'Semi-finals',
+    dates: '۱۷-۱۸ جولای',
+    matches: 2,
+    icon: Shield,
+    color: 'from-fuchsia-600/20 to-fuchsia-700/10 border-fuchsia-700/40',
+    textColor: 'text-fuchsia-400',
+  },
+  {
+    key: 'final',
+    name: 'فینال',
+    nameEn: 'Final',
+    dates: '۱۹ جولای',
+    matches: 1,
+    venue: 'متلایف استدیوم، نیوجرسی',
+    icon: Trophy,
+    color: 'from-yellow-500/20 to-amber-600/10 border-yellow-500/40',
+    textColor: 'text-yellow-400',
+  },
+];
+
+// Target: June 11, 2026 at 20:00 EDT (UTC-4)
+const WC_START = new Date('2026-06-11T20:00:00-04:00');
+
+interface Countdown {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  elapsed: boolean;
+}
+
+function getCountdown(): Countdown {
+  const now = new Date();
+  const diff = WC_START.getTime() - now.getTime();
+  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, elapsed: true };
+  const totalSeconds = Math.floor(diff / 1000);
+  const days    = Math.floor(totalSeconds / 86400);
+  const hours   = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return { days, hours, minutes, seconds, elapsed: false };
+}
+
 function getTeam(id: string) {
-  return allWCTeams.find(t => t.id === id) ?? (extraTeams[id] ? { id, ...extraTeams[id], conf: '', host: false } : null);
+  return (
+    allWCTeams.find(t => t.id === id) ??
+    (extraTeams[id] ? { id, ...extraTeams[id], conf: '', host: false } : null)
+  );
 }
 
 export default function WorldCup() {
   const { darkMode, isFavorite, toggleFavorite } = useApp();
-  const [view, setView] = useState<'teams' | 'groups' | 'winners'>('teams');
+  const [view, setView]         = useState<'teams' | 'groups' | 'bracket' | 'winners'>('teams');
   const [confFilter, setConfFilter] = useState('all');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<Countdown>(getCountdown);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown(getCountdown());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const filteredTeams = confFilter === 'all' ? allWCTeams : allWCTeams.filter(t => t.conf === confFilter);
   const getPlayersByTeamId = (id: string) => nationalTeams.find(t => t.id === id)?.players ?? [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6">
-      {/* Hero */}
-      <div className="relative rounded-3xl overflow-hidden mb-6 bg-gradient-to-br from-gray-900 via-blue-950 to-emerald-950 p-6 text-white">
-        <div className="absolute inset-0 overflow-hidden opacity-10">
+
+      {/* ── Hero ── */}
+      <div className="relative rounded-3xl overflow-hidden mb-5 bg-gradient-to-br from-gray-900 via-blue-950 to-emerald-950 p-6 text-white">
+        {/* background balls */}
+        <div className="absolute inset-0 overflow-hidden opacity-10 pointer-events-none">
           {Array.from({ length: 16 }).map((_, i) => (
-            <span key={i} className="absolute text-3xl select-none" style={{ top: `${(i * 37) % 90}%`, left: `${(i * 53) % 90}%`, opacity: 0.6 }}>⚽</span>
+            <span
+              key={i}
+              className="absolute text-3xl select-none"
+              style={{ top: `${(i * 37) % 90}%`, left: `${(i * 53) % 90}%`, opacity: 0.6 }}
+            >
+              ⚽
+            </span>
           ))}
         </div>
+
         <div className="relative">
           <div className="flex items-start justify-between">
             <div>
@@ -149,39 +281,77 @@ export default function WorldCup() {
             </div>
             <div className="text-6xl">🏆</div>
           </div>
+
+          {/* stats strip */}
           <div className="grid grid-cols-4 gap-2.5 mt-5">
             {[
-              { v: 48, l: 'تیم' },
-              { v: 104, l: 'بازی' },
-              { v: 16, l: 'ورزشگاه' },
-              { v: 16, l: 'گروه' },
+              { v: 48,  l: 'تیم'    },
+              { v: 104, l: 'بازی'   },
+              { v: 16,  l: 'ورزشگاه'},
+              { v: 16,  l: 'گروه'   },
             ].map(({ v, l }) => (
-              <div key={l} className="rounded-2xl p-3 bg-white/8 backdrop-blur text-center">
+              <div key={l} className="rounded-2xl p-3 bg-white/[0.08] backdrop-blur text-center">
                 <p className="text-2xl font-black">{toPersian(v)}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{l}</p>
               </div>
             ))}
           </div>
-          <div className="mt-4 px-3 py-2 bg-white/5 rounded-xl">
+
+          {/* ── Live countdown ── */}
+          <div className="mt-4 rounded-2xl overflow-hidden border border-white/10">
+            {countdown.elapsed ? (
+              <div className="flex items-center justify-center gap-3 px-4 py-3 bg-red-600/20">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-red-400 font-black text-base tracking-wide">🔴 در حال انجام است!</span>
+              </div>
+            ) : (
+              <div className="px-4 pt-3 pb-4 bg-white/[0.05]">
+                <p className="text-xs text-gray-400 mb-3 text-center">⏳ شروع جام جهانی تا…</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { value: countdown.days,    label: 'روز'    },
+                    { value: countdown.hours,   label: 'ساعت'   },
+                    { value: countdown.minutes, label: 'دقیقه'  },
+                    { value: countdown.seconds, label: 'ثانیه'  },
+                  ].map(({ value, label }) => (
+                    <div
+                      key={label}
+                      className="rounded-xl bg-white/[0.08] border border-white/10 py-2 text-center"
+                    >
+                      <p className="text-2xl font-black tabular-nums leading-none">
+                        {toPersian(String(value).padStart(2, '0'))}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3 px-3 py-2 bg-white/[0.04] rounded-xl">
             <p className="text-xs text-gray-400">
-              🏟️ میزبانان: نیوجرسی · لس‌آنجلس · میامی · داکوتا · سیاتل · سان فرانسیسکو · بوستون · دالاس · هیوستون · کانزاس سیتی · فیلادلفیا · آتلانتا · وانکوور · تورنتو · گوادالاخارا · مکزیکوسیتی · مونتری
+              🏟️ ورزشگاه‌ها: نیوجرسی · لس‌آنجلس · میامی · سیاتل · سان فرانسیسکو · بوستون · دالاس · هیوستون · کانزاس سیتی · فیلادلفیا · آتلانتا · وانکوور · تورنتو · گوادالاخارا · مکزیکوسیتی · مونتری
             </p>
           </div>
         </div>
       </div>
 
-      {/* View tabs */}
+      {/* ── Tab bar ── */}
       <div className={`flex gap-1 p-1 rounded-2xl mb-5 ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         {[
-          { key: 'teams',   label: 'تیم‌ها' },
-          { key: 'groups',  label: 'گروه‌ها' },
-          { key: 'winners', label: 'قهرمانان' },
+          { key: 'teams',   label: 'تیم‌ها'    },
+          { key: 'groups',  label: 'گروه‌ها'   },
+          { key: 'bracket', label: 'براکت'     },
+          { key: 'winners', label: 'قهرمانان'  },
         ].map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setView(key as typeof view)}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              view === key ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg' : darkMode ? 'text-gray-400' : 'text-gray-500'
+            className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+              view === key
+                ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg'
+                : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             {label}
@@ -189,22 +359,29 @@ export default function WorldCup() {
         ))}
       </div>
 
-      {/* Teams view */}
+      {/* ══════════════════════════════ TEAMS ══════════════════════════════ */}
       {view === 'teams' && (
         <>
-          <div className="flex gap-1.5 overflow-x-auto pb-2 mb-4">
+          {/* confederation filter pills */}
+          <div className="flex gap-1.5 overflow-x-auto pb-2 mb-4 scrollbar-hide">
             {confederations.map(conf => (
               <button
                 key={conf.id}
                 onClick={() => setConfFilter(conf.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap flex-shrink-0 transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap flex-shrink-0 transition-all border ${
                   confFilter === conf.id
-                    ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow'
-                    : darkMode ? 'bg-gray-800 text-gray-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-500'
+                    ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow border-transparent'
+                    : darkMode
+                      ? 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'
+                      : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
                 }`}
               >
                 {conf.name}
-                <span className={`text-xs px-1 rounded ${confFilter === conf.id ? 'bg-white/20' : darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${
+                  confFilter === conf.id
+                    ? 'bg-white/25 text-white'
+                    : darkMode ? 'bg-gray-700 text-gray-400' : 'bg-gray-200 text-gray-500'
+                }`}>
                   {toPersian(conf.count)}
                 </span>
               </button>
@@ -214,53 +391,107 @@ export default function WorldCup() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {filteredTeams.map(team => {
               const players = getPlayersByTeamId(team.id);
-              const isExp = expanded === team.id;
+              const isExp   = expanded === team.id;
+              const isIran  = team.id === 'iran';
               return (
-                <div key={team.id} className={`rounded-2xl border overflow-hidden ${
-                  darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'
-                } ${team.id === 'iran' ? darkMode ? 'border-emerald-800 ring-1 ring-emerald-700/30' : 'border-emerald-300 ring-1 ring-emerald-200' : ''}`}>
+                <div
+                  key={team.id}
+                  className={`rounded-2xl border overflow-hidden transition-all ${
+                    darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'
+                  } ${
+                    isIran
+                      ? darkMode
+                        ? 'border-emerald-700 ring-2 ring-emerald-700/40 shadow-emerald-900/30 shadow-lg'
+                        : 'border-emerald-400 ring-2 ring-emerald-300/60 shadow-emerald-100 shadow-lg'
+                      : ''
+                  }`}
+                >
                   <button
                     onClick={() => setExpanded(isExp ? null : team.id)}
-                    className={`w-full p-4 transition-colors ${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}
+                    className={`w-full p-4 transition-colors text-right ${
+                      darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'
+                    } ${isIran ? darkMode ? 'bg-emerald-950/30' : 'bg-emerald-50/50' : ''}`}
                   >
                     <div className="flex items-start justify-between mb-2">
-                      <span className="text-4xl">{team.flag}</span>
-                      <div className="flex items-center gap-1">
+                      <span className="text-4xl leading-none">{team.flag}</span>
+                      <div className="flex items-center gap-1 flex-wrap justify-end">
                         {team.host && (
-                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold">میزبان</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold">
+                            میزبان
+                          </span>
                         )}
-                        {team.id === 'iran' && (
-                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">ایران</span>
+                        {isIran && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-black">
+                            ایران 💚
+                          </span>
+                        )}
+                        {team.conf && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full border font-bold ${confColors[team.conf] ?? ''}`}>
+                            {team.conf}
+                          </span>
                         )}
                         <button
                           onClick={e => { e.stopPropagation(); toggleFavorite(team.id); }}
-                          className={`p-1 ${isFavorite(team.id) ? 'text-yellow-400' : darkMode ? 'text-gray-700' : 'text-gray-300'}`}
+                          className={`p-1 transition-colors ${
+                            isFavorite(team.id)
+                              ? 'text-yellow-400'
+                              : darkMode ? 'text-gray-700 hover:text-gray-500' : 'text-gray-300 hover:text-gray-400'
+                          }`}
                         >
                           <Star size={13} fill={isFavorite(team.id) ? 'currentColor' : 'none'} />
                         </button>
                       </div>
                     </div>
-                    <p className={`font-bold text-sm text-right ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{team.name}</p>
-                    <p className={`text-xs text-right mt-0.5 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{team.conf}</p>
+                    <p className={`font-bold text-sm text-right ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                      {team.name}
+                    </p>
                     {players.length > 0 && (
-                      <div className={`flex items-center justify-between mt-2 pt-2 border-t ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
-                        <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{toPersian(players.length)} بازیکن</span>
-                        {isExp ? <ChevronUp size={13} className={darkMode ? 'text-gray-600' : 'text-gray-400'} /> : <ChevronDown size={13} className={darkMode ? 'text-gray-600' : 'text-gray-400'} />}
+                      <div className={`flex items-center justify-between mt-2 pt-2 border-t ${
+                        darkMode ? 'border-gray-800' : 'border-gray-100'
+                      }`}>
+                        <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                          {toPersian(players.length)} بازیکن
+                        </span>
+                        {isExp
+                          ? <ChevronUp size={13} className={darkMode ? 'text-gray-600' : 'text-gray-400'} />
+                          : <ChevronDown size={13} className={darkMode ? 'text-gray-600' : 'text-gray-400'} />
+                        }
                       </div>
                     )}
                   </button>
+
                   {isExp && players.length > 0 && (
-                    <div className={`border-t px-3 py-3 space-y-1.5 ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
+                    <div className={`border-t px-3 py-3 space-y-1.5 ${
+                      darkMode ? 'border-gray-800' : 'border-gray-100'
+                    }`}>
                       {players.map(p => (
-                        <div key={p.id} className={`flex items-center gap-2 p-2 rounded-xl ${darkMode ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
-                          <span className={`text-xs font-black w-6 text-center tabular-nums ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{toPersian(p.number)}</span>
-                          <span className={`text-xs font-medium flex-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{p.persianName}</span>
+                        <div
+                          key={p.id}
+                          className={`flex items-center gap-2 p-2 rounded-xl ${
+                            darkMode ? 'bg-gray-800/50' : 'bg-gray-50'
+                          }`}
+                        >
+                          <span className={`text-xs font-black w-6 text-center tabular-nums ${
+                            darkMode ? 'text-gray-600' : 'text-gray-400'
+                          }`}>
+                            {toPersian(p.number)}
+                          </span>
+                          <span className={`text-xs font-medium flex-1 text-right ${
+                            darkMode ? 'text-gray-300' : 'text-gray-700'
+                          }`}>
+                            {p.persianName}
+                          </span>
                           <span className={`text-xs font-bold ${
-                            p.position === 'GK' ? 'text-yellow-400' :
-                            p.position.includes('B') ? 'text-blue-400' :
-                            p.position === 'DM' || p.position === 'CM' || p.position === 'AM' ? 'text-emerald-400' :
-                            'text-red-400'
-                          }`}>{p.position}</span>
+                            p.position === 'GK'
+                              ? 'text-yellow-400'
+                              : p.position.includes('B')
+                                ? 'text-blue-400'
+                                : p.position === 'DM' || p.position === 'CM' || p.position === 'AM'
+                                  ? 'text-emerald-400'
+                                  : 'text-red-400'
+                          }`}>
+                            {p.position}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -272,68 +503,347 @@ export default function WorldCup() {
         </>
       )}
 
-      {/* Groups view */}
+      {/* ══════════════════════════════ GROUPS ══════════════════════════════ */}
       {view === 'groups' && (
         <>
-          <div className={`px-4 py-3 rounded-2xl mb-4 text-xs ${darkMode ? 'bg-blue-950/50 text-blue-300 border border-blue-900' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+          <div className={`px-4 py-3 rounded-2xl mb-4 text-xs font-medium ${
+            darkMode
+              ? 'bg-blue-950/50 text-blue-300 border border-blue-900'
+              : 'bg-blue-50 text-blue-700 border border-blue-200'
+          }`}>
             ۱۶ گروه × ۳ تیم — ۲ تیم اول هر گروه + ۸ تیم سوم برتر به مرحله یک‌هشتم راه می‌یابند
           </div>
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {wcGroups.map(({ label, teams: teamIds }) => (
-              <div key={label} className={`rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-                <div className={`px-4 py-3 border-b font-bold text-sm ${darkMode ? 'border-gray-800 text-gray-200' : 'border-gray-100 text-gray-800'}`}>
-                  {label}
+
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {wcGroups.map(({ label, teams: teamIds }) => {
+              // build match pairings: A vs B, B vs C, A vs C
+              const pairings: [string, string][] = [
+                [teamIds[0], teamIds[1]],
+                [teamIds[1], teamIds[2]],
+                [teamIds[0], teamIds[2]],
+              ];
+              return (
+                <div
+                  key={label}
+                  className={`rounded-2xl border overflow-hidden ${
+                    darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'
+                  }`}
+                >
+                  {/* group header */}
+                  <div className={`px-4 py-3 border-b font-black text-sm ${
+                    darkMode
+                      ? 'border-gray-800 text-gray-100 bg-gray-800/40'
+                      : 'border-gray-100 text-gray-800 bg-gray-50'
+                  }`}>
+                    {label}
+                  </div>
+
+                  {/* standings table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className={darkMode ? 'text-gray-600' : 'text-gray-400'}>
+                          <th className="px-3 py-1.5 text-right font-bold w-5">#</th>
+                          <th className="px-2 py-1.5 text-right font-bold">تیم</th>
+                          <th className="px-2 py-1.5 text-center font-bold">ب</th>
+                          <th className="px-2 py-1.5 text-center font-bold">و</th>
+                          <th className="px-2 py-1.5 text-center font-bold">م</th>
+                          <th className="px-2 py-1.5 text-center font-bold">ش</th>
+                          <th className="px-2 py-1.5 text-center font-bold">گل</th>
+                          <th className="px-2 py-1.5 text-center font-bold">ام</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {teamIds.map((tid, idx) => {
+                          const team = getTeam(tid);
+                          if (!team) return null;
+                          const isIran = tid === 'iran';
+                          return (
+                            <tr
+                              key={tid}
+                              className={`border-t transition-colors ${
+                                darkMode ? 'border-gray-800/60' : 'border-gray-50'
+                              } ${isIran
+                                  ? darkMode ? 'bg-emerald-950/30' : 'bg-emerald-50/60'
+                                  : darkMode ? 'hover:bg-gray-800/20' : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <td className={`px-3 py-2 text-center font-black ${
+                                idx === 0
+                                  ? 'text-yellow-400'
+                                  : idx === 1
+                                    ? 'text-blue-400'
+                                    : darkMode ? 'text-gray-600' : 'text-gray-300'
+                              }`}>
+                                {toPersian(idx + 1)}
+                              </td>
+                              <td className="px-2 py-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-base leading-none">{team.flag}</span>
+                                  <span className={`font-medium ${
+                                    isIran
+                                      ? 'text-emerald-400 font-bold'
+                                      : darkMode ? 'text-gray-200' : 'text-gray-800'
+                                  }`}>
+                                    {team.name}
+                                  </span>
+                                  {(team as typeof allWCTeams[0]).host && (
+                                    <span className="text-blue-400 text-xs">★</span>
+                                  )}
+                                </div>
+                              </td>
+                              {/* played, wins, draws, losses, goals, points — all 0 since WC just started */}
+                              {[0, 0, 0, 0, '0-0', 0].map((val, ci) => (
+                                <td key={ci} className={`px-2 py-2 text-center tabular-nums ${
+                                  ci === 5
+                                    ? 'font-black text-sm ' + (darkMode ? 'text-gray-300' : 'text-gray-700')
+                                    : darkMode ? 'text-gray-500' : 'text-gray-400'
+                                }`}>
+                                  {typeof val === 'string' ? val : toPersian(val)}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* match pairings */}
+                  <div className={`border-t px-3 py-3 space-y-1.5 ${
+                    darkMode ? 'border-gray-800' : 'border-gray-100'
+                  }`}>
+                    <p className={`text-xs font-bold mb-2 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                      🗓 زمان: مرحله گروهی
+                    </p>
+                    {pairings.map(([aId, bId], pi) => {
+                      const ta = getTeam(aId);
+                      const tb = getTeam(bId);
+                      if (!ta || !tb) return null;
+                      return (
+                        <div
+                          key={pi}
+                          className={`flex items-center justify-between rounded-xl px-3 py-1.5 text-xs ${
+                            darkMode ? 'bg-gray-800/50' : 'bg-gray-50'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1">
+                            <span>{ta.flag}</span>
+                            <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{ta.name}</span>
+                          </span>
+                          <span className={`font-black mx-1 ${darkMode ? 'text-gray-600' : 'text-gray-300'}`}>
+                            ―
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{tb.name}</span>
+                            <span>{tb.flag}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div>
-                  {teamIds.map((tid, idx) => {
-                    const team = getTeam(tid);
-                    if (!team) return null;
-                    return (
-                      <div key={tid} className={`flex items-center gap-3 px-4 py-2.5 ${
-                        idx < teamIds.length - 1 ? darkMode ? 'border-b border-gray-800/60' : 'border-b border-gray-50' : ''
-                      } ${darkMode ? 'hover:bg-gray-800/30' : 'hover:bg-gray-50'} transition-colors`}>
-                        <span className="text-xl">{team.flag}</span>
-                        <span className={`font-medium text-sm flex-1 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{team.name}</span>
-                        {tid === 'iran' && <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">🇮🇷</span>}
-                        {(team as typeof allWCTeams[0]).host && <span className="text-xs text-blue-400">میزبان</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
 
-      {/* Winners view */}
+      {/* ══════════════════════════════ BRACKET ══════════════════════════════ */}
+      {view === 'bracket' && (
+        <div className="max-w-xl mx-auto">
+          <div className={`px-4 py-3 rounded-2xl mb-6 text-xs font-medium text-center ${
+            darkMode
+              ? 'bg-yellow-950/40 text-yellow-300 border border-yellow-900/50'
+              : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+          }`}>
+            🏆 مرحله حذفی جام جهانی ۲۰۲۶ — ۳۲ تیم، ۵ مرحله، ۱ قهرمان
+          </div>
+
+          <div className="space-y-0">
+            {bracketPhases.map((phase, idx) => {
+              const Icon = phase.icon;
+              const isFinal = phase.key === 'final';
+              return (
+                <div key={phase.key} className="relative">
+                  {/* connector arrow (not after last) */}
+                  {idx < bracketPhases.length - 1 && (
+                    <div className="flex justify-center py-1 z-10 relative">
+                      <ArrowRight
+                        size={18}
+                        className={`rotate-90 ${darkMode ? 'text-gray-600' : 'text-gray-300'}`}
+                      />
+                    </div>
+                  )}
+
+                  <div className={`relative rounded-2xl border bg-gradient-to-br p-5 ${phase.color} ${
+                    isFinal ? 'ring-2 ring-yellow-500/30 shadow-lg shadow-yellow-900/20' : ''
+                  }`}>
+                    {isFinal && (
+                      <div className="absolute -top-1 -right-1">
+                        <span className="text-2xl">🏆</span>
+                      </div>
+                    )}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Icon size={16} className={phase.textColor} />
+                          <span className={`font-black text-base ${phase.textColor}`}>
+                            {phase.name}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                            darkMode ? 'bg-white/10 text-gray-400' : 'bg-black/5 text-gray-500'
+                          }`}>
+                            {phase.nameEn}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                            📅 {phase.dates}
+                          </span>
+                          {!isFinal && (
+                            <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                              ⚽ {toPersian(phase.matches)} بازی
+                            </span>
+                          )}
+                          {isFinal && phase.venue && (
+                            <span className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                              🏟 {phase.venue}
+                            </span>
+                          )}
+                        </div>
+                        <p className={`text-xs mt-2 italic ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                          {isFinal
+                            ? '🌟 فینال جام جهانی ۲۰۲۶'
+                            : 'در انتظار نتایج مرحله گروهی'}
+                        </p>
+                      </div>
+                      {!isFinal && (
+                        <div className={`text-center flex-shrink-0 rounded-xl px-3 py-2 ${
+                          darkMode ? 'bg-white/5' : 'bg-black/5'
+                        }`}>
+                          <p className={`text-2xl font-black tabular-nums ${phase.textColor}`}>
+                            {toPersian(phase.matches)}
+                          </p>
+                          <p className={`text-xs mt-0.5 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                            بازی
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* bracket info footer */}
+          <div className={`mt-6 rounded-2xl p-4 text-xs space-y-1.5 ${
+            darkMode ? 'bg-gray-900 border border-gray-800 text-gray-400' : 'bg-gray-50 border border-gray-200 text-gray-500'
+          }`}>
+            <p className="font-bold text-sm mb-2 text-center">📋 فرمت حذفی</p>
+            <p>• ۳۲ تیم (۲ اول هر گروه + ۸ تیم سوم برتر) وارد مرحله حذفی می‌شوند</p>
+            <p>• هر بازی یک برنده دارد — در صورت تساوی وقت اضافه و پنالتی</p>
+            <p>• مرحله فینال در متلایف استدیوم نیوجرسی برگزار می‌شود</p>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════ WINNERS ══════════════════════════════ */}
       {view === 'winners' && (
-        <div className="space-y-3">
-          {prevWinners.map((w, i) => (
-            <div key={w.year} className={`flex items-center gap-4 p-5 rounded-2xl border ${
-              darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'
-            } ${i === 0 ? 'ring-1 ring-yellow-500/30' : ''}`}>
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 ${
-                i === 0 ? 'bg-yellow-500/15' : darkMode ? 'bg-gray-800' : 'bg-gray-100'
-              }`}>
-                {i === 0 ? '🏆' : '🥈'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-lg font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{toPersian(w.year)}</span>
-                  <span className={`text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>· {w.venue}</span>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-2xl">{w.flag}</span>
-                  <span className={`font-bold ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{w.champion}</span>
-                  <span className={`text-xs font-bold ${darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-500'} px-2 py-0.5 rounded-full`}>{w.score}</span>
-                  <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>در برابر</span>
-                  <span className="text-2xl">{w.runnerFlag}</span>
-                  <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{w.runner}</span>
-                </div>
-              </div>
+        <div className="space-y-6">
+          {/* stats sub-section */}
+          <div className={`rounded-2xl border p-5 ${
+            darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'
+          }`}>
+            <div className="flex items-center gap-2 mb-4">
+              <Trophy size={18} className="text-yellow-400" />
+              <h2 className={`font-black text-base ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                پرافتخارترین کشورها
+              </h2>
             </div>
-          ))}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {wcStats.map((s, i) => (
+                <div
+                  key={s.country}
+                  className={`rounded-xl p-3 text-center border transition-all ${
+                    i === 0
+                      ? darkMode
+                        ? 'border-yellow-700/50 bg-yellow-950/30'
+                        : 'border-yellow-300 bg-yellow-50'
+                      : darkMode
+                        ? 'border-gray-800 bg-gray-800/40'
+                        : 'border-gray-100 bg-gray-50'
+                  }`}
+                >
+                  <span className="text-2xl block mb-1">{s.flag}</span>
+                  <p className={`text-xs font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                    {s.country}
+                  </p>
+                  <p className={`text-lg font-black mt-0.5 ${
+                    i === 0 ? 'text-yellow-400' : darkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    {toPersian(s.wins)} 🏆
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* full history */}
+          <div className="space-y-2.5">
+            <h2 className={`font-black text-sm px-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              تاریخچه کامل از ۱۹۳۰ تا کنون
+            </h2>
+            {prevWinners.map((w, i) => (
+              <div
+                key={w.year}
+                className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${
+                  darkMode ? 'bg-gray-900 border-gray-800 hover:bg-gray-800/50' : 'bg-white border-gray-200 shadow-sm hover:shadow'
+                } ${i === 0 ? 'ring-1 ring-yellow-500/40 shadow-yellow-900/10 shadow' : ''}`}
+              >
+                {/* icon */}
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${
+                  i === 0
+                    ? darkMode ? 'bg-yellow-500/15 text-yellow-400' : 'bg-yellow-100 text-yellow-600'
+                    : i < 3
+                      ? darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'
+                      : darkMode ? 'bg-gray-800/50' : 'bg-gray-50'
+                }`}>
+                  {i === 0 ? '🏆' : i === 1 ? '🥈' : i === 2 ? '🥉' : '⚽'}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className={`text-base font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      {toPersian(w.year)}
+                    </span>
+                    <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                      · {w.venue}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xl">{w.flag}</span>
+                    <span className={`font-bold text-sm ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                      {w.champion}
+                    </span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {w.score}
+                    </span>
+                    <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                      در برابر
+                    </span>
+                    <span className="text-xl">{w.runnerFlag}</span>
+                    <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {w.runner}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
