@@ -1,10 +1,16 @@
-import { useState, useEffect } from 'react';
-import { Trophy, Shield } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Trophy, Shield, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
 
 interface WCTeam { id: string; fa: string; fl: string; g: string; conf: string; }
 interface WCMatch { h: string; a: string; g: string; md: number; ld: string; st: string; }
+interface MatchScore {
+  hs: number | null;
+  as: number | null;
+  status: 'live' | 'ft' | 'ht' | 'upcoming';
+  min?: number;
+}
 
 // Stadium UTC offsets in summer 2026
 const ST_TZ: Record<string, number> = {
@@ -36,6 +42,44 @@ const CFCL: Record<string, string> = {
   CONCACAF:'bg-orange-500/20 text-orange-400 border-orange-500/30',
   OFC:     'bg-purple-500/20 text-purple-400 border-purple-500/30',
 };
+
+// ESPN name lookup
+const ESPN_WC = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.worldcup';
+const TNAME: Record<string, string> = {
+  '1':'mexico','2':'south africa','3':'south korea','4':'czech republic',
+  '5':'canada','6':'bosnia','7':'qatar','8':'switzerland',
+  '9':'brazil','10':'morocco','11':'haiti','12':'scotland',
+  '13':'united states','14':'paraguay','15':'australia','16':'turkey',
+  '17':'germany','18':'curacao','19':'ivory coast','20':'ecuador',
+  '21':'netherlands','22':'japan','23':'sweden','24':'tunisia',
+  '25':'belgium','26':'egypt','27':'iran','28':'new zealand',
+  '29':'spain','30':'cape verde','31':'saudi arabia','32':'uruguay',
+  '33':'france','34':'senegal','35':'iraq','36':'norway',
+  '37':'argentina','38':'algeria','39':'austria','40':'jordan',
+  '41':'portugal','42':'congo','43':'uzbekistan','44':'colombia',
+  '45':'england','46':'croatia','47':'ghana','48':'panama',
+};
+const N2ID = Object.fromEntries(Object.entries(TNAME).map(([id, n]) => [n, id]));
+const ALIASES: Record<string, string> = {
+  'usa':'13','korea republic':'3','republic of korea':'3',
+  "cote d'ivoire":'19',"côte d'ivoire":'19','dr congo':'42',
+  'democratic republic of congo':'42','türkiye':'16','turkiye':'16',
+  'bosnia and herzegovina':'6','cape verde islands':'30',
+  'new zealand':'28','saudi arabia':'31','curaçao':'18','curacao':'18',
+};
+function findTeamId(name: string): string | undefined {
+  const l = name.toLowerCase().trim();
+  if (N2ID[l]) return N2ID[l];
+  if (ALIASES[l]) return ALIASES[l];
+  return Object.entries(N2ID).find(([k]) => l.startsWith(k.slice(0,5)) || k.startsWith(l.slice(0,5)))?.[1];
+}
+function findMatchIdx(hName: string, aName: string): number {
+  const hId = findTeamId(hName);
+  const aId = findTeamId(aName);
+  if (!hId || !aId) return -1;
+  const idx = MATCHES.findIndex(m => m.h === hId && m.a === aId);
+  return idx >= 0 ? idx : MATCHES.findIndex(m => m.h === aId && m.a === hId);
+}
 
 const TEAMS: WCTeam[] = [
   {id:'1', fa:'مکزیک',          fl:'mx',     g:'A', conf:'CONCACAF'},
@@ -220,9 +264,13 @@ export default function WorldCup() {
   const [confFilter, setConfFilter] = useState('all');
   const [started, setStarted] = useState(false);
   const [countdown, setCountdown] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
+  const [scores, setScores] = useState<Record<number, MatchScore>>({});
+  const [scoresUpdated, setScoresUpdated] = useState<Date | null>(null);
+  const [fetchingScores, setFetchingScores] = useState(false);
+  const [liveCount, setLiveCount] = useState(0);
 
   useEffect(() => {
-    const wcStart = new Date('2026-06-11T18:00:00Z'); // Opening match 13:00 CDT
+    const wcStart = new Date('2026-06-11T18:00:00Z');
     const tick = () => {
       const diff = wcStart.getTime() - Date.now();
       if (diff <= 0) { setStarted(true); setCountdown(null); return; }
@@ -239,9 +287,89 @@ export default function WorldCup() {
     return () => clearInterval(timer);
   }, []);
 
+  const fetchWCScores = useCallback(async () => {
+    setFetchingScores(true);
+    try {
+      const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '');
+      const today = new Date();
+      // Fetch today + past 7 days to get all completed matches
+      const dates = Array.from({ length: 8 }, (_, i) =>
+        fmt(new Date(today.getTime() - i * 86400000))
+      );
+      const results = await Promise.all(
+        dates.map(d =>
+          fetch(`${ESPN_WC}/scoreboard?dates=${d}`)
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
+        )
+      );
+      const newScores: Record<number, MatchScore> = {};
+      let live = 0;
+      for (const data of results) {
+        if (!data?.events) continue;
+        for (const e of data.events) {
+          const comp = e.competitions?.[0];
+          const home = comp?.competitors?.find((c: any) => c.homeAway === 'home');
+          const away = comp?.competitors?.find((c: any) => c.homeAway === 'away');
+          if (!home || !away) continue;
+          const idx = findMatchIdx(home.team?.displayName ?? '', away.team?.displayName ?? '');
+          if (idx < 0) continue;
+          const sName = e.status?.type?.name ?? '';
+          const isLive = sName === 'STATUS_IN_PROGRESS';
+          const isHT   = sName === 'STATUS_HALFTIME';
+          const isFT   = sName === 'STATUS_FINAL' || sName === 'STATUS_FULL_TIME';
+          if (isLive) live++;
+          newScores[idx] = {
+            hs: home.score != null ? parseInt(home.score, 10) : null,
+            as: away.score != null ? parseInt(away.score, 10) : null,
+            status: isLive ? 'live' : isHT ? 'ht' : isFT ? 'ft' : 'upcoming',
+            min: isLive ? Math.floor(e.status?.clock ?? 0) : undefined,
+          };
+        }
+      }
+      setScores(newScores);
+      setLiveCount(live);
+      setScoresUpdated(new Date());
+    } catch { /* ignore */ }
+    finally { setFetchingScores(false); }
+  }, []);
+
+  useEffect(() => {
+    fetchWCScores();
+    const t = setInterval(fetchWCScores, 60000);
+    return () => clearInterval(t);
+  }, [fetchWCScores]);
+
   const displayTeams = confFilter === 'all' ? TEAMS : TEAMS.filter(t => t.conf === confFilter);
   const gTeams = (g: string) => TEAMS.filter(t => t.g === g);
-  const gMatches = (g: string, md: number) => MATCHES.filter(m => m.g === g && m.md === md);
+  const gMatchesIdx = (g: string, md: number) =>
+    MATCHES.map((m, idx) => ({ ...m, idx })).filter(m => m.g === g && m.md === md);
+
+  // Compute real standings from fetched scores
+  function computeStandings(g: string) {
+    const teams = gTeams(g);
+    type S = { p: number; w: number; d: number; l: number; gf: number; ga: number; pts: number };
+    const st: Record<string, S> = {};
+    teams.forEach(t => { st[t.id] = { p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0 }; });
+    MATCHES.forEach((m, idx) => {
+      if (m.g !== g) return;
+      const sc = scores[idx];
+      if (!sc || sc.status === 'upcoming' || sc.hs === null || sc.as === null) return;
+      const { hs, as } = sc;
+      st[m.h].p++; st[m.h].gf += hs; st[m.h].ga += as;
+      st[m.a].p++; st[m.a].gf += as; st[m.a].ga += hs;
+      if (hs > as) { st[m.h].w++; st[m.h].pts += 3; st[m.a].l++; }
+      else if (as > hs) { st[m.a].w++; st[m.a].pts += 3; st[m.h].l++; }
+      else { st[m.h].d++; st[m.a].d++; st[m.h].pts++; st[m.a].pts++; }
+    });
+    return [...teams].sort((a, b) => {
+      const sa = st[a.id], sb = st[b.id];
+      if (sb.pts !== sa.pts) return sb.pts - sa.pts;
+      const gda = sa.gf - sa.ga, gdb = sb.gf - sb.ga;
+      if (gdb !== gda) return gdb - gda;
+      return sb.gf - sa.gf;
+    }).map(t => ({ team: t, ...st[t.id] }));
+  }
 
   const card = `rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`;
 
@@ -258,9 +386,33 @@ export default function WorldCup() {
         </div>
         <div className="px-4 py-4">
           {started ? (
-            <div className="flex items-center justify-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 live-pulse" />
-              <span className={`font-bold text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>در حال برگزاری است!</span>
+            <div>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 live-pulse" />
+                <span className={`font-bold text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  در حال برگزاری است!
+                  {liveCount > 0 && (
+                    <span className="mr-2 text-red-400 font-black">{toPersian(liveCount)} بازی زنده</span>
+                  )}
+                </span>
+              </div>
+              {/* Live score status bar */}
+              <div className={`flex items-center justify-between text-xs px-1 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                <span>
+                  {scoresUpdated
+                    ? `بروز: ${scoresUpdated.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}`
+                    : 'در حال دریافت نتایج...'}
+                </span>
+                <button
+                  onClick={fetchWCScores}
+                  disabled={fetchingScores}
+                  className={`p-1 rounded transition-colors ${fetchingScores ? 'animate-spin' : ''} ${
+                    darkMode ? 'hover:text-gray-400' : 'hover:text-gray-600'
+                  }`}
+                >
+                  <RefreshCw size={12} />
+                </button>
+              </div>
             </div>
           ) : countdown ? (
             <div>
@@ -306,73 +458,88 @@ export default function WorldCup() {
       {tab === 'groups' && (
         <div>
           <div className="flex flex-wrap gap-1.5 mb-4">
-            {GROUPS.map(g => (
-              <button
-                key={g}
-                onClick={() => setSelGroup(g)}
-                className={`w-10 h-10 rounded-xl text-sm font-black transition-all ${
-                  selGroup === g
-                    ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow'
-                    : darkMode ? 'bg-gray-800 text-gray-400 hover:text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {g}
-              </button>
-            ))}
+            {GROUPS.map(g => {
+              const hasLive = MATCHES.some((m, idx) => m.g === g && scores[idx]?.status === 'live');
+              return (
+                <button
+                  key={g}
+                  onClick={() => setSelGroup(g)}
+                  className={`w-10 h-10 rounded-xl text-sm font-black transition-all relative ${
+                    selGroup === g
+                      ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow'
+                      : darkMode ? 'bg-gray-800 text-gray-400 hover:text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {g}
+                  {hasLive && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 live-pulse" />
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Standing table */}
-          <div className={`${card} overflow-hidden mb-3`}>
-            <div className={`px-4 py-3 border-b text-sm font-bold ${darkMode ? 'border-gray-800 text-gray-100' : 'border-gray-100 text-gray-900'}`}>
-              گروه {selGroup}
-            </div>
-            <table className="w-full text-xs">
-              <thead>
-                <tr className={darkMode ? 'text-gray-600' : 'text-gray-400'}>
-                  <th className="px-3 py-2 text-right">تیم</th>
-                  <th className="px-2 py-2 text-center w-8">ب</th>
-                  <th className="px-2 py-2 text-center w-8 text-emerald-500">و</th>
-                  <th className="px-2 py-2 text-center w-8">م</th>
-                  <th className="px-2 py-2 text-center w-8 text-red-400">ش</th>
-                  <th className="px-2 py-2 text-center w-10">گل</th>
-                  <th className="px-2 py-2 text-center w-8 font-bold">ام</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gTeams(selGroup).map((team, i) => (
-                  <tr key={team.id} className={`border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}`}>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs w-4 text-center ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{i + 1}</span>
-                        <img
-                          src={`https://flagcdn.com/w40/${team.fl}.png`}
-                          alt={team.fa}
-                          className="w-7 h-5 object-cover rounded-sm flex-shrink-0"
-                        />
-                        <span className={`font-semibold ${team.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                          {team.fa}
-                        </span>
-                        {team.id === '27' && <span className="text-xs">💚</span>}
-                      </div>
-                    </td>
-                    {[0, 0, 0, 0].map((_, j) => (
-                      <td key={j} className={`px-2 py-2.5 text-center ${
-                        j === 1 ? 'text-emerald-500 font-medium' :
-                        j === 3 ? 'text-red-400' :
-                        darkMode ? 'text-gray-500' : 'text-gray-500'
-                      }`}>{toPersian(0)}</td>
+          {(() => {
+            const rows = computeStandings(selGroup);
+            return (
+              <div className={`${card} overflow-hidden mb-3`}>
+                <div className={`px-4 py-3 border-b text-sm font-bold flex items-center justify-between ${darkMode ? 'border-gray-800 text-gray-100' : 'border-gray-100 text-gray-900'}`}>
+                  <span>گروه {selGroup}</span>
+                  {scoresUpdated && (
+                    <span className={`text-xs font-normal ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                      زنده {fetchingScores ? '...' : '✓'}
+                    </span>
+                  )}
+                </div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className={darkMode ? 'text-gray-600' : 'text-gray-400'}>
+                      <th className="px-3 py-2 text-right">تیم</th>
+                      <th className="px-2 py-2 text-center w-8">ب</th>
+                      <th className="px-2 py-2 text-center w-8 text-emerald-500">و</th>
+                      <th className="px-2 py-2 text-center w-8">م</th>
+                      <th className="px-2 py-2 text-center w-8 text-red-400">ش</th>
+                      <th className="px-2 py-2 text-center w-10">گل</th>
+                      <th className="px-2 py-2 text-center w-8 font-bold">ام</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(({ team, p, w, d, l, gf, ga, pts }, i) => (
+                      <tr key={team.id} className={`border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'} ${i < 2 ? darkMode ? 'bg-emerald-950/10' : 'bg-emerald-50/50' : ''}`}>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs w-4 text-center font-bold ${i < 2 ? 'text-emerald-500' : darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{i + 1}</span>
+                            <img
+                              src={`https://flagcdn.com/w40/${team.fl}.png`}
+                              alt={team.fa}
+                              className="w-7 h-5 object-cover rounded-sm flex-shrink-0"
+                            />
+                            <span className={`font-semibold ${team.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                              {team.fa}
+                            </span>
+                            {team.id === '27' && <span className="text-xs">💚</span>}
+                          </div>
+                        </td>
+                        <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{toPersian(p)}</td>
+                        <td className="px-2 py-2.5 text-center text-emerald-500 font-medium">{toPersian(w)}</td>
+                        <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{toPersian(d)}</td>
+                        <td className="px-2 py-2.5 text-center text-red-400 font-medium">{toPersian(l)}</td>
+                        <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                          {toPersian(gf)}:{toPersian(ga)}
+                        </td>
+                        <td className={`px-2 py-2.5 text-center font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{toPersian(pts)}</td>
+                      </tr>
                     ))}
-                    <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>۰:۰</td>
-                    <td className={`px-2 py-2.5 text-center font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{toPersian(0)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           {/* Matches per matchday */}
           {[1, 2, 3].map(md => {
-            const ms = gMatches(selGroup, md);
+            const ms = gMatchesIdx(selGroup, md);
             if (!ms.length) return null;
             return (
               <div key={md} className={`${card} overflow-hidden mb-3`}>
@@ -384,20 +551,48 @@ export default function WorldCup() {
                   const td = toTehran(m.ld, m.st);
                   const timeStr = td.toLocaleTimeString('fa-IR', { timeZone: 'Asia/Tehran', hour: '2-digit', minute: '2-digit' });
                   const dateStr = td.toLocaleDateString('fa-IR', { timeZone: 'Asia/Tehran', month: 'short', day: 'numeric' });
+                  const sc = scores[m.idx];
+                  const showScore = sc && sc.status !== 'upcoming' && sc.hs !== null && sc.as !== null;
                   return (
                     <div
                       key={i}
-                      className={`flex items-center px-3 py-3 ${i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}`}
+                      className={`flex items-center px-3 py-3 ${i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''} ${
+                        sc?.status === 'live' ? darkMode ? 'bg-red-950/20' : 'bg-red-50/50' : ''
+                      }`}
                     >
                       <div className="flex-1 flex items-center justify-end gap-2">
                         <span className={`text-xs font-semibold text-right ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{ht?.fa}</span>
                         <img src={`https://flagcdn.com/w40/${ht?.fl}.png`} alt="" className="w-8 h-5 object-cover rounded-sm flex-shrink-0" />
                       </div>
-                      <div className="flex flex-col items-center mx-3 min-w-[60px]">
-                        <span className={`text-sm font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{timeStr}</span>
-                        <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{dateStr}</span>
-                        <span className={`text-xs ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>{STD[m.st]}</span>
+
+                      {/* Score or time */}
+                      <div className="flex flex-col items-center mx-3 min-w-[72px]">
+                        {showScore ? (
+                          <>
+                            <div className="flex items-center gap-1">
+                              {sc.status === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 live-pulse flex-shrink-0" />}
+                              <span className={`text-base font-black tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                                {toPersian(sc.hs!)} – {toPersian(sc.as!)}
+                              </span>
+                            </div>
+                            <span className={`text-xs font-medium ${
+                              sc.status === 'live' ? 'text-red-400' :
+                              sc.status === 'ht' ? 'text-yellow-400' :
+                              darkMode ? 'text-gray-500' : 'text-gray-400'
+                            }`}>
+                              {sc.status === 'live' ? `${toPersian(sc.min ?? 0)}'` :
+                               sc.status === 'ht' ? 'نیمه' : 'پایان'}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className={`text-sm font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{timeStr}</span>
+                            <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{dateStr}</span>
+                            <span className={`text-xs ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>{STD[m.st]}</span>
+                          </>
+                        )}
                       </div>
+
                       <div className="flex-1 flex items-center gap-2">
                         <img src={`https://flagcdn.com/w40/${at?.fl}.png`} alt="" className="w-8 h-5 object-cover rounded-sm flex-shrink-0" />
                         <span className={`text-xs font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{at?.fa}</span>
