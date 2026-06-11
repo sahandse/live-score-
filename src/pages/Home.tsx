@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Flame, Clock, CheckCircle, RefreshCw, Search, History, X } from 'lucide-react';
+import { Flame, Clock, CheckCircle, RefreshCw, Search, History, X, ChevronLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { liveMatches as mockMatches, standings as mockStandings } from '../data/matches';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
@@ -12,6 +13,42 @@ import {
 } from '../services/footballApi';
 import type { Match } from '../data/matches';
 import { toPersianTeamName } from '../data/teamNames';
+
+// ─── World Cup 2026 static data (used only in WC banner) ─────────────────
+const ST_TZ_WC: Record<string, number> = {
+  '1':-5,'2':-5,'3':-5,'4':-5,'5':-5,'6':-5,
+  '7':-4,'8':-4,'9':-4,'10':-4,'11':-4,'12':-4,
+  '13':-7,'14':-7,'15':-7,'16':-7,
+};
+function wcTehranTime(ld: string, st: string): string {
+  const [d, t] = ld.split(' ');
+  const [mo, dy, yr] = d.split('/').map(Number);
+  const [hr, mn] = t.split(':').map(Number);
+  const tz = ST_TZ_WC[st] ?? -5;
+  const dt = new Date(Date.UTC(yr, mo - 1, dy, hr, mn) - tz * 3600000);
+  return dt.toLocaleTimeString('fa-IR', { timeZone: 'Asia/Tehran', hour: '2-digit', minute: '2-digit' });
+}
+function wcTehranDate(ld: string, st: string): string {
+  const [d, t] = ld.split(' ');
+  const [mo, dy, yr] = d.split('/').map(Number);
+  const [hr, mn] = t.split(':').map(Number);
+  const tz = ST_TZ_WC[st] ?? -5;
+  const dt = new Date(Date.UTC(yr, mo - 1, dy, hr, mn) - tz * 3600000);
+  return dt.toLocaleDateString('fa-IR', { timeZone: 'Asia/Tehran', month: 'short', day: 'numeric' });
+}
+
+// Opening day matches (June 11 CDT)
+const WC_OPENING = [
+  { h:'مکزیک',hf:'mx', a:'آفریقای جنوبی',af:'za', ld:'06/11/2026 13:00',st:'1',  g:'A' },
+  { h:'کره جنوبی',hf:'kr', a:'جمهوری چک',af:'cz', ld:'06/11/2026 20:00',st:'2',  g:'A' },
+];
+
+// Iran's 3 group matches
+const WC_IRAN = [
+  { h:'ایران',hf:'ir',  a:'نیوزیلند',af:'nz', ld:'06/15/2026 18:00',st:'16', g:'G', md:1, home:true  },
+  { h:'بلژیک',hf:'be',  a:'ایران',af:'ir',    ld:'06/21/2026 12:00',st:'16', g:'G', md:2, home:false },
+  { h:'مصر',  hf:'eg',  a:'ایران',af:'ir',    ld:'06/26/2026 20:00',st:'14', g:'G', md:3, home:false },
+];
 
 type Tab = 'live' | 'upcoming' | 'finished' | 'recent';
 
@@ -42,6 +79,7 @@ function apiMatchToLocal(m: LiveMatch): Match {
 
 export default function Home() {
   const { darkMode } = useApp();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('live');
   const [searchQuery, setSearchQuery] = useState('');
   const [leagueFilter, setLeagueFilter] = useState<string | null>(null);
@@ -187,6 +225,90 @@ export default function Home() {
             <div className="text-xs opacity-80">{stat.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* ── World Cup 2026 Banner ── */}
+      <div className={`rounded-2xl border overflow-hidden mb-4 ${darkMode ? 'bg-gray-900 border-emerald-900/50' : 'bg-white border-emerald-200 shadow-sm'}`}>
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-4 py-3 cursor-pointer bg-gradient-to-r from-emerald-600 via-blue-600 to-purple-600"
+          onClick={() => navigate('/worldcup')}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🏆</span>
+            <span className="text-white font-bold text-sm">جام جهانی ۲۰۲۶</span>
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-white live-pulse" />
+              <span className="text-white/80 text-xs">در حال برگزاری</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-white/80 text-xs">
+            <span>همه بازی‌ها</span>
+            <ChevronLeft size={13} />
+          </div>
+        </div>
+
+        {/* Opening day matches */}
+        <div className={`px-3 py-2 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
+          <p className={`text-xs font-bold mb-2 px-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+            بازی‌های افتتاحیه · امروز
+          </p>
+          <div className="space-y-1.5">
+            {WC_OPENING.map((m, i) => (
+              <div key={i} className={`flex items-center gap-2 px-2 py-2 rounded-xl ${darkMode ? 'bg-gray-800/60' : 'bg-gray-50'}`}>
+                <div className="flex-1 flex items-center justify-end gap-1.5">
+                  <span className={`text-xs font-semibold text-right ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{m.h}</span>
+                  <img src={`https://flagcdn.com/w40/${m.hf}.png`} alt="" className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                </div>
+                <div className="flex flex-col items-center min-w-[56px]">
+                  <span className={`text-xs font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{wcTehranTime(m.ld, m.st)}</span>
+                  <span className={`text-xs ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>گروه {m.g}</span>
+                </div>
+                <div className="flex-1 flex items-center gap-1.5">
+                  <img src={`https://flagcdn.com/w40/${m.af}.png`} alt="" className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                  <span className={`text-xs font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{m.a}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Iran's matches */}
+        <div className="px-3 py-2">
+          <div className="flex items-center gap-1.5 mb-2 px-1">
+            <img src="https://flagcdn.com/w40/ir.png" alt="" className="w-5 h-3.5 object-cover rounded-sm" />
+            <p className={`text-xs font-bold ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>بازی‌های ایران · گروه G</p>
+          </div>
+          <div className="space-y-1.5">
+            {WC_IRAN.map((m, i) => {
+              const isPast = new Date(m.ld.replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2')) < new Date();
+              return (
+                <div
+                  key={i}
+                  className={`flex items-center gap-2 px-2 py-2 rounded-xl border ${
+                    darkMode
+                      ? 'bg-emerald-950/30 border-emerald-900/40'
+                      : 'bg-emerald-50 border-emerald-100'
+                  } ${isPast ? 'opacity-50' : ''}`}
+                >
+                  <div className="flex-1 flex items-center justify-end gap-1.5">
+                    <span className={`text-xs font-semibold text-right ${m.home ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{m.h}</span>
+                    <img src={`https://flagcdn.com/w40/${m.hf}.png`} alt="" className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                  </div>
+                  <div className="flex flex-col items-center min-w-[68px]">
+                    <span className={`text-xs font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{wcTehranTime(m.ld, m.st)}</span>
+                    <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{wcTehranDate(m.ld, m.st)}</span>
+                    <span className={`text-xs ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>هفته {toPersian(m.md)}</span>
+                  </div>
+                  <div className="flex-1 flex items-center gap-1.5">
+                    <img src={`https://flagcdn.com/w40/${m.af}.png`} alt="" className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                    <span className={`text-xs font-semibold ${!m.home ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{m.a}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Search bar */}
