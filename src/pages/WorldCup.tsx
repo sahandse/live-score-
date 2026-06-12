@@ -45,6 +45,14 @@ const CFCL: Record<string, string> = {
 
 // ESPN name lookup
 const ESPN_WC = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.worldcup';
+const GH_RAW = 'https://raw.githubusercontent.com/rezarahiminia/worldcup2026/main';
+// worldcup26.ir public endpoints – CORS origin:* for /get/* paths
+const WC26_PATHS = [
+  'https://worldcup26.ir/get/matches',
+  'https://worldcup26.ir/api/matches',
+  'https://worldcup26.ir/get/games',
+  'https://worldcup26.ir/api/games',
+];
 const TNAME: Record<string, string> = {
   '1':'mexico','2':'south africa','3':'south korea','4':'czech republic',
   '5':'canada','6':'bosnia','7':'qatar','8':'switzerland',
@@ -79,6 +87,47 @@ function findMatchIdx(hName: string, aName: string): number {
   if (!hId || !aId) return -1;
   const idx = MATCHES.findIndex(m => m.h === hId && m.a === aId);
   return idx >= 0 ? idx : MATCHES.findIndex(m => m.h === aId && m.a === hId);
+}
+
+// Parse status from worldcup26.ir / GitHub raw format
+function parseWC26Status(finished: string, elapsed: string): MatchScore['status'] {
+  if (finished.toUpperCase() === 'TRUE') return 'ft';
+  const el = elapsed.toLowerCase().trim();
+  if (!el || el === 'notstarted' || el === 'not started' || el === 'false') return 'upcoming';
+  if (el === 'ht' || el.includes('half')) return 'ht';
+  return 'live';
+}
+
+// Convert worldcup26.ir / GitHub raw match array to score map
+// GitHub IDs are 1-based = MATCHES index + 1 (group stage IDs 1–72)
+function parseWC26Matches(arr: any[]): Record<number, MatchScore> {
+  const map: Record<number, MatchScore> = {};
+  for (const m of arr) {
+    // Prefer ID-based lookup (most reliable, same ordering as MATCHES array)
+    const rawId = m.id ?? m._id?.['$oid'];
+    const idNum = parseInt(String(rawId), 10);
+    let idx = !isNaN(idNum) && idNum >= 1 && idNum <= 72 ? idNum - 1 : -1;
+    // Fallback: lookup by team IDs
+    if (idx < 0) {
+      const hId = String(m.home_team_id ?? m.homeTeamId ?? '');
+      const aId = String(m.away_team_id ?? m.awayTeamId ?? '');
+      if (hId && aId) idx = MATCHES.findIndex(mm => mm.h === hId && mm.a === aId);
+    }
+    if (idx < 0) continue;
+    const fin = String(m.finished ?? m.is_finished ?? '');
+    const el = String(m.time_elapsed ?? m.timeElapsed ?? m.minute ?? '');
+    const status = parseWC26Status(fin, el);
+    if (status === 'upcoming') continue;
+    const hs = parseInt(String(m.home_score ?? m.homeScore ?? '0'), 10);
+    const as_ = parseInt(String(m.away_score ?? m.awayScore ?? '0'), 10);
+    map[idx] = {
+      hs: isNaN(hs) ? 0 : hs,
+      as: isNaN(as_) ? 0 : as_,
+      status,
+      min: status === 'live' ? (parseInt(el, 10) || undefined) : undefined,
+    };
+  }
+  return map;
 }
 
 const TEAMS: WCTeam[] = [
@@ -268,6 +317,7 @@ export default function WorldCup() {
   const [scoresUpdated, setScoresUpdated] = useState<Date | null>(null);
   const [fetchingScores, setFetchingScores] = useState(false);
   const [liveCount, setLiveCount] = useState(0);
+  const [dataSource, setDataSource] = useState<'worldcup26' | 'github' | 'espn' | null>(null);
 
   useEffect(() => {
     const wcStart = new Date('2026-06-11T18:00:00Z');
@@ -290,45 +340,80 @@ export default function WorldCup() {
   const fetchWCScores = useCallback(async () => {
     setFetchingScores(true);
     try {
-      const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '');
-      const today = new Date();
-      // Fetch today + past 7 days to get all completed matches
-      const dates = Array.from({ length: 8 }, (_, i) =>
-        fmt(new Date(today.getTime() - i * 86400000))
-      );
-      const results = await Promise.all(
-        dates.map(d =>
-          fetch(`${ESPN_WC}/scoreboard?dates=${d}`)
-            .then(r => r.ok ? r.json() : null)
-            .catch(() => null)
-        )
-      );
-      const newScores: Record<number, MatchScore> = {};
-      let live = 0;
-      for (const data of results) {
-        if (!data?.events) continue;
-        for (const e of data.events) {
-          const comp = e.competitions?.[0];
-          const home = comp?.competitors?.find((c: any) => c.homeAway === 'home');
-          const away = comp?.competitors?.find((c: any) => c.homeAway === 'away');
-          if (!home || !away) continue;
-          const idx = findMatchIdx(home.team?.displayName ?? '', away.team?.displayName ?? '');
-          if (idx < 0) continue;
-          const sName = e.status?.type?.name ?? '';
-          const isLive = sName === 'STATUS_IN_PROGRESS';
-          const isHT   = sName === 'STATUS_HALFTIME';
-          const isFT   = sName === 'STATUS_FINAL' || sName === 'STATUS_FULL_TIME';
-          if (isLive) live++;
-          newScores[idx] = {
-            hs: home.score != null ? parseInt(home.score, 10) : null,
-            as: away.score != null ? parseInt(away.score, 10) : null,
-            status: isLive ? 'live' : isHT ? 'ht' : isFT ? 'ft' : 'upcoming',
-            min: isLive ? Math.floor(e.status?.clock ?? 0) : undefined,
-          };
-        }
+      let newScores: Record<number, MatchScore> = {};
+      let src: typeof dataSource = null;
+
+      // ── 1. worldcup26.ir (primary – CORS open for /get/* from browsers) ──────
+      for (const path of WC26_PATHS) {
+        try {
+          const r = await fetch(path, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5000) });
+          if (!r.ok) continue;
+          const data = await r.json();
+          const arr: any[] = Array.isArray(data) ? data : (data.matches ?? data.games ?? data.data ?? []);
+          if (!arr.length) continue;
+          const parsed = parseWC26Matches(arr);
+          if (Object.keys(parsed).length > 0) {
+            newScores = parsed; src = 'worldcup26'; break;
+          }
+        } catch { continue; }
       }
+
+      // ── 2. GitHub raw football.matches.json (secondary – always accessible) ──
+      if (!src) {
+        try {
+          const r = await fetch(`${GH_RAW}/football.matches.json`);
+          if (r.ok) {
+            const arr: any[] = await r.json();
+            const parsed = parseWC26Matches(arr);
+            if (Object.keys(parsed).length > 0) {
+              newScores = parsed; src = 'github';
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      // ── 3. ESPN fallback ──────────────────────────────────────────────────────
+      if (!src) {
+        const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '');
+        const today = new Date();
+        const dates = Array.from({ length: 8 }, (_, i) =>
+          fmt(new Date(today.getTime() - i * 86400000))
+        );
+        const results = await Promise.all(
+          dates.map(d =>
+            fetch(`${ESPN_WC}/scoreboard?dates=${d}`)
+              .then(r => r.ok ? r.json() : null)
+              .catch(() => null)
+          )
+        );
+        for (const data of results) {
+          if (!data?.events) continue;
+          for (const e of data.events) {
+            const comp = e.competitions?.[0];
+            const home = comp?.competitors?.find((c: any) => c.homeAway === 'home');
+            const away = comp?.competitors?.find((c: any) => c.homeAway === 'away');
+            if (!home || !away) continue;
+            const idx = findMatchIdx(home.team?.displayName ?? '', away.team?.displayName ?? '');
+            if (idx < 0) continue;
+            const sName = e.status?.type?.name ?? '';
+            const isLive = sName === 'STATUS_IN_PROGRESS';
+            const isHT   = sName === 'STATUS_HALFTIME';
+            const isFT   = sName === 'STATUS_FINAL' || sName === 'STATUS_FULL_TIME';
+            newScores[idx] = {
+              hs: home.score != null ? parseInt(home.score, 10) : null,
+              as: away.score != null ? parseInt(away.score, 10) : null,
+              status: isLive ? 'live' : isHT ? 'ht' : isFT ? 'ft' : 'upcoming',
+              min: isLive ? Math.floor(e.status?.clock ?? 0) : undefined,
+            };
+          }
+        }
+        if (Object.keys(newScores).length > 0) src = 'espn';
+      }
+
+      const live = Object.values(newScores).filter(s => s.status === 'live').length;
       setScores(newScores);
       setLiveCount(live);
+      setDataSource(src);
       setScoresUpdated(new Date());
     } catch { /* ignore */ }
     finally { setFetchingScores(false); }
@@ -336,7 +421,8 @@ export default function WorldCup() {
 
   useEffect(() => {
     fetchWCScores();
-    const t = setInterval(fetchWCScores, 60000);
+    // Poll every 2 minutes (worldcup26.ir updates live data frequently)
+    const t = setInterval(fetchWCScores, 120000);
     return () => clearInterval(t);
   }, [fetchWCScores]);
 
@@ -400,7 +486,7 @@ export default function WorldCup() {
               <div className={`flex items-center justify-between text-xs px-1 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
                 <span>
                   {scoresUpdated
-                    ? `بروز: ${scoresUpdated.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}`
+                    ? `${dataSource === 'worldcup26' ? '🟢 worldcup26.ir' : dataSource === 'github' ? '🟡 GitHub' : '🔵 ESPN'} · ${scoresUpdated.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}`
                     : 'در حال دریافت نتایج...'}
                 </span>
                 <button
