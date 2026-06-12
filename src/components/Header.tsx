@@ -1,10 +1,10 @@
-import { Moon, Sun, Bell } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 import { usePersianDateTime } from '../hooks/usePersianDate';
 import { useApp } from '../context/AppContext';
 
 export default function Header() {
   const { timeString, dateString, dayName } = usePersianDateTime();
-  const { darkMode, toggleDarkMode, reminders } = useApp();
+  const { darkMode, toggleDarkMode } = useApp();
 
   return (
     <header className={`sticky top-0 z-50 backdrop-blur-xl border-b ${
@@ -16,15 +16,15 @@ export default function Header() {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-blue-600 flex items-center justify-center shadow-lg">
-              <span className="text-white text-lg">⚽</span>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 via-blue-600 to-purple-600 flex items-center justify-center shadow-lg">
+              <span className="text-white text-lg">🏆</span>
             </div>
             <div>
               <h1 className={`text-lg font-bold leading-none ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                لایو اسکور
+                جام جهانی ۲۰۲۶
               </h1>
               <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                نتایج زنده فوتبال
+                FIFA World Cup 2026
               </p>
             </div>
           </div>
@@ -45,21 +45,6 @@ export default function Header() {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            {/* Reminder badge */}
-            <button className={`relative p-2 rounded-xl transition-all ${
-              darkMode
-                ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'
-                : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
-            }`}>
-              <Bell size={18} />
-              {reminders.length > 0 && (
-                <span className="absolute -top-1 -left-1 w-4 h-4 bg-emerald-500 rounded-full text-white text-xs flex items-center justify-center font-bold">
-                  {reminders.length}
-                </span>
-              )}
-            </button>
-
-            {/* Dark mode toggle */}
             <button
               onClick={toggleDarkMode}
               className={`p-2 rounded-xl transition-all ${
