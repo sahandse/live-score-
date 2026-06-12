@@ -230,6 +230,38 @@ export default function Home() {
             </span>
           </div>
         )}
+
+        {/* Video links for finished matches */}
+        {m.st === 'ft' && ht && at && (
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <a
+              href={`https://www.varzesh3.com/?s=${encodeURIComponent(`${ht.fa} ${at.fa} جام جهانی`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                darkMode
+                  ? 'bg-red-950/40 text-red-400 hover:bg-red-900/50 border border-red-900/50'
+                  : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+              }`}
+            >
+              <span>▶</span>
+              <span>ویدیو در ورزش سه</span>
+            </a>
+            <a
+              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(`${ht.en} vs ${at.en} World Cup 2026 highlights goals`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                darkMode
+                  ? 'bg-gray-800 text-gray-400 hover:text-white border border-gray-700'
+                  : 'bg-gray-100 text-gray-500 hover:text-gray-700 border border-gray-200'
+              }`}
+            >
+              <span>🎬</span>
+              <span>YouTube</span>
+            </a>
+          </div>
+        )}
       </div>
     );
   }
