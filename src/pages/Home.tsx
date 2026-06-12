@@ -46,6 +46,12 @@ const PHASE_LABEL: Record<MatchType, { fa: string; dates: string; matches: numbe
   final: { fa: 'فینال',         dates: '۱۹ جولای',     matches: 1  },
 };
 
+// ─── Video map: FIFA code key "HOME-AWAY" → direct Varzesh3 CDN URL ──────────
+const VIDEO_MAP: Record<string, string> = {
+  'KOR-CZE': 'https://video-vcdn.varzesh3.com/videos-quality/2026/06/12/B/0wfw1qoo.mp4',
+  'MEX-RSA': 'https://video-vcdn.varzesh3.com/videos-quality/2026/06/12/A/0lgin4nu.mp4',
+};
+
 export default function Home() {
   const { darkMode, tab, refreshInterval } = useApp();
   const [selGroup, setSelGroup]  = useState('A');
@@ -231,37 +237,56 @@ export default function Home() {
           </div>
         )}
 
-        {/* Video links for finished matches */}
-        {m.st === 'ft' && ht && at && (
-          <div className="flex items-center justify-center gap-2 mt-2">
-            <a
-              href={`https://www.varzesh3.com/?s=${encodeURIComponent(`${ht.fa} ${at.fa} جام جهانی`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                darkMode
-                  ? 'bg-red-950/40 text-red-400 hover:bg-red-900/50 border border-red-900/50'
-                  : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
-              }`}
-            >
-              <span>▶</span>
-              <span>ویدیو در ورزش سه</span>
-            </a>
-            <a
-              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(`${ht.en} vs ${at.en} World Cup 2026 highlights goals`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                darkMode
-                  ? 'bg-gray-800 text-gray-400 hover:text-white border border-gray-700'
-                  : 'bg-gray-100 text-gray-500 hover:text-gray-700 border border-gray-200'
-              }`}
-            >
-              <span>🎬</span>
-              <span>YouTube</span>
-            </a>
-          </div>
-        )}
+        {/* Video section for finished matches */}
+        {m.st === 'ft' && ht && at && (() => {
+          const videoUrl = VIDEO_MAP[`${ht.code}-${at.code}`];
+          return (
+            <div className="mt-2 space-y-2">
+              {videoUrl && (
+                <div className={`rounded-xl overflow-hidden border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <div className={`flex items-center gap-2 px-3 py-1.5 ${darkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                    <span className="text-red-500 text-xs">▶</span>
+                    <span className={`text-xs font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      خلاصه بازی — ورزش سه
+                    </span>
+                  </div>
+                  <video
+                    controls
+                    preload="metadata"
+                    className="w-full max-h-52 bg-black"
+                    controlsList="nodownload"
+                  >
+                    <source src={videoUrl} type="video/mp4" />
+                  </video>
+                </div>
+              )}
+              <div className="flex items-center justify-center gap-2">
+                <a
+                  href={`https://www.varzesh3.com/?s=${encodeURIComponent(`${ht.fa} ${at.fa} جام جهانی`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className={`flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                    darkMode ? 'bg-red-950/40 text-red-400 hover:bg-red-900/50 border border-red-900/50'
+                             : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+                  }`}
+                >
+                  <span>▶</span>
+                  <span>{videoUrl ? 'بیشتر در ورزش سه' : 'ویدیو در ورزش سه'}</span>
+                </a>
+                <a
+                  href={`https://www.youtube.com/results?search_query=${encodeURIComponent(`${ht.en} vs ${at.en} World Cup 2026 highlights`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className={`flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                    darkMode ? 'bg-gray-800 text-gray-400 hover:text-white border border-gray-700'
+                             : 'bg-gray-100 text-gray-500 hover:text-gray-700 border border-gray-200'
+                  }`}
+                >
+                  <span>🎬</span>
+                  <span>YouTube</span>
+                </a>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   }
