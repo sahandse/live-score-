@@ -6,7 +6,7 @@ import {
   fetchTeams, fetchMatches, fetchStadiums, fetchApiStandings, computeStandings,
   matchTehranTime, matchTehranShort, matchTehranDay, matchUtcDate, isTodayTehran,
   parseScorers,
-  type WCTeam, type WCMatch, type WCStadium, type GRow, type DataSource, type MatchType,
+  type WCTeam, type WCMatch, type WCStadium, type GRow, type MatchType,
 } from '../services/wcApi';
 
 // ─── Static data ──────────────────────────────────────────────────────────────
@@ -46,11 +46,8 @@ const PHASE_LABEL: Record<MatchType, { fa: string; dates: string; matches: numbe
   final: { fa: 'فینال',         dates: '۱۹ جولای',     matches: 1  },
 };
 
-type AppTab = 'live' | 'groups' | 'schedule' | 'bracket' | 'teams';
-
 export default function Home() {
-  const { darkMode } = useApp();
-  const [tab, setTab]           = useState<AppTab>('live');
+  const { darkMode, tab, refreshInterval } = useApp();
   const [selGroup, setSelGroup]  = useState('A');
   const [confFilter, setConfFilter] = useState('all');
 
@@ -58,7 +55,6 @@ export default function Home() {
   const [stadiums, setStadiums] = useState<WCStadium[]>([]);
   const [matches,  setMatches]  = useState<WCMatch[]>([]);
   const [loading,  setLoading]  = useState(true);
-  const [source,   setSource]   = useState<DataSource | null>(null);
   const [updated,  setUpdated]  = useState<Date | null>(null);
   const [started,  setStarted]  = useState(false);
   const [apiStandings, setApiStandings] = useState<Record<string, GRow[]> | null>(null);
@@ -80,16 +76,16 @@ export default function Home() {
   const loadMatches = useCallback(async () => {
     setLoading(true);
     const [res, st] = await Promise.all([fetchMatches(), fetchApiStandings()]);
-    if (res) { setMatches(res.matches); setSource(res.source); setUpdated(new Date()); }
+    if (res) { setMatches(res.matches); setUpdated(new Date()); }
     if (st)  setApiStandings(st);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     loadMatches();
-    const t = setInterval(loadMatches, 120000);
+    const t = setInterval(loadMatches, refreshInterval);
     return () => clearInterval(t);
-  }, [loadMatches]);
+  }, [loadMatches, refreshInterval]);
 
   const teamMap = useMemo(
     () => Object.fromEntries(teams.map(t => [t.id, t])),
@@ -137,7 +133,6 @@ export default function Home() {
 
   const card  = `rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`;
   const muted = darkMode ? 'text-gray-500' : 'text-gray-400';
-  const sourceLabel = source === 'worldcup26' ? '🟢 worldcup26.ir' : source === 'github' ? '🟡 GitHub' : null;
 
   function Flag({ iso2, size = 'md' }: { iso2?: string; size?: 'sm' | 'md' | 'lg' }) {
     if (!iso2) return <span className={size === 'lg' ? 'text-3xl' : size === 'md' ? 'text-xl' : 'text-base'}>🏳️</span>;
@@ -263,16 +258,13 @@ export default function Home() {
               ) : (
                 <span className="text-white/70 text-xs">به زودی شروع می‌شود</span>
               )}
-              <div className="flex items-center gap-1.5">
-                {sourceLabel && <span className="text-white/60 text-xs">{sourceLabel}</span>}
-                <button
-                  onClick={loadMatches}
-                  disabled={loading}
-                  className={`p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors ${loading ? 'animate-spin' : ''}`}
-                >
-                  <RefreshCw size={12} className="text-white" />
-                </button>
-              </div>
+              <button
+                onClick={loadMatches}
+                disabled={loading}
+                className={`p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors ${loading ? 'animate-spin' : ''}`}
+              >
+                <RefreshCw size={12} className="text-white" />
+              </button>
             </div>
           </div>
           {updated && (
@@ -281,34 +273,6 @@ export default function Home() {
             </p>
           )}
         </div>
-      </div>
-
-      {/* ── Tabs ─────────────────────────────────────────────────────────── */}
-      <div className={`grid grid-cols-5 gap-1 p-1 rounded-2xl mb-4 ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
-        {([
-          ['live',     'زنده',   liveMatches.length > 0 ? String(liveMatches.length) : ''],
-          ['groups',   'گروه‌ها', ''],
-          ['schedule', 'برنامه', ''],
-          ['bracket',  'براکت',  ''],
-          ['teams',    'تیم‌ها',  ''],
-        ] as [AppTab, string, string][]).map(([k, label, badge]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={`relative py-2 rounded-xl text-xs font-bold transition-all ${
-              tab === k
-                ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow'
-                : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {label}
-            {badge && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center font-bold leading-none">
-                {toPersian(Number(badge))}
-              </span>
-            )}
-          </button>
-        ))}
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════ */}
@@ -436,9 +400,8 @@ export default function Home() {
 
           {/* Standings */}
           <div className={`${card} overflow-hidden mb-3`}>
-            <div className={`px-4 py-3 border-b font-bold text-sm flex items-center justify-between ${darkMode ? 'border-gray-800 text-gray-100' : 'border-gray-100 text-gray-900'}`}>
-              <span>جدول گروه {selGroup}</span>
-              {sourceLabel && <span className={`text-xs font-normal ${muted}`}>{sourceLabel}</span>}
+            <div className={`px-4 py-3 border-b font-bold text-sm ${darkMode ? 'border-gray-800 text-gray-100' : 'border-gray-100 text-gray-900'}`}>
+              جدول گروه {selGroup}
             </div>
             <table className="w-full text-xs">
               <thead>
