@@ -3,37 +3,14 @@ import { RefreshCw, Trophy, Shield } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
 import {
-  fetchTeams, fetchMatches, computeStandings,
+  fetchTeams, fetchMatches, fetchStadiums, fetchApiStandings, computeStandings,
   matchTehranTime, matchTehranShort, matchTehranDay, matchUtcDate, isTodayTehran,
-  type WCTeam, type WCMatch, type GRow, type DataSource,
+  parseScorers,
+  type WCTeam, type WCMatch, type WCStadium, type GRow, type DataSource, type MatchType,
 } from '../services/wcApi';
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
-const CONF_CL: Record<string, string> = {
-  UEFA:    'text-blue-400 border-blue-500/30 bg-blue-500/10',
-  CONMEBOL:'text-yellow-400 border-yellow-500/30 bg-yellow-500/10',
-  AFC:     'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
-  CAF:     'text-red-400 border-red-500/30 bg-red-500/10',
-  CONCACAF:'text-orange-400 border-orange-500/30 bg-orange-500/10',
-  OFC:     'text-purple-400 border-purple-500/30 bg-purple-500/10',
-};
-const STD_NAMES: Record<string, string> = {
-  '1':'آزتکا','2':'آکرون','3':'BBVA','4':'AT&T','5':'NRG',
-  '6':'Arrowhead','7':'Mercedes-Benz','8':'Hard Rock','9':'Gillette',
-  '10':'Lincoln Financial','11':'MetLife','12':'BMO Field',
-  '13':'BC Place','14':'Lumen Field','15':"Levi's",'16':'SoFi',
-};
-const KNOCKOUT_PHASES = [
-  {phase:'یک‌هشتم نهایی', en:'Round of 32', dates:'۳–۲۸ جون', matches:16, tp:'r32'},
-  {phase:'یک‌چهارم نهایی',en:'Round of 16', dates:'۷–۴ جولای', matches:8, tp:'r16'},
-  {phase:'ربع‌نهایی',en:'Quarter-finals', dates:'۱۱–۹ جولای', matches:4, tp:'qf'},
-  {phase:'نیمه‌نهایی',en:'Semi-finals',   dates:'۱۵–۱۴ جولای', matches:2, tp:'sf'},
-  {phase:'رده سوم',en:'3rd Place',        dates:'۱۸ جولای',    matches:1, tp:'3rd'},
-  {phase:'فینال',en:'Final',              dates:'۱۹ جولای',    matches:1, tp:'final'},
-];
-
-type AppTab = 'live' | 'groups' | 'schedule' | 'bracket' | 'teams';
 
 const CONF_MAP: Record<string, string> = {
   MEX:'CONCACAF', RSA:'CAF', KOR:'AFC', CZE:'UEFA',
@@ -50,18 +27,41 @@ const CONF_MAP: Record<string, string> = {
   ENG:'UEFA', CRO:'UEFA', GHA:'CAF', PAN:'CONCACAF',
 };
 
+const CONF_CL: Record<string, string> = {
+  UEFA:    'text-blue-400 border-blue-500/30 bg-blue-500/10',
+  CONMEBOL:'text-yellow-400 border-yellow-500/30 bg-yellow-500/10',
+  AFC:     'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
+  CAF:     'text-red-400 border-red-500/30 bg-red-500/10',
+  CONCACAF:'text-orange-400 border-orange-500/30 bg-orange-500/10',
+  OFC:     'text-purple-400 border-purple-500/30 bg-purple-500/10',
+};
+
+const PHASE_LABEL: Record<MatchType, { fa: string; dates: string; matches: number }> = {
+  group: { fa: 'مرحله گروهی',    dates: '۱۱–۲۷ جون',    matches: 72 },
+  r32:   { fa: 'یک‌هشتم نهایی', dates: '۳–۲۸ جون',     matches: 16 },
+  r16:   { fa: 'یک‌چهارم نهایی',dates: '۷–۴ جولای',    matches: 8  },
+  qf:    { fa: 'ربع‌نهایی',     dates: '۱۱–۹ جولای',   matches: 4  },
+  sf:    { fa: 'نیمه‌نهایی',    dates: '۱۵–۱۴ جولای',  matches: 2  },
+  third: { fa: 'رده سوم',       dates: '۱۸ جولای',     matches: 1  },
+  final: { fa: 'فینال',         dates: '۱۹ جولای',     matches: 1  },
+};
+
+type AppTab = 'live' | 'groups' | 'schedule' | 'bracket' | 'teams';
+
 export default function Home() {
   const { darkMode } = useApp();
-  const [tab, setTab]     = useState<AppTab>('live');
-  const [selGroup, setSelGroup] = useState('G');
+  const [tab, setTab]           = useState<AppTab>('live');
+  const [selGroup, setSelGroup]  = useState('A');
   const [confFilter, setConfFilter] = useState('all');
 
-  const [teams,   setTeams]   = useState<WCTeam[]>([]);
-  const [matches, setMatches] = useState<WCMatch[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [source,  setSource]  = useState<DataSource | null>(null);
-  const [updated, setUpdated] = useState<Date | null>(null);
-  const [started, setStarted] = useState(false);
+  const [teams,    setTeams]    = useState<WCTeam[]>([]);
+  const [stadiums, setStadiums] = useState<WCStadium[]>([]);
+  const [matches,  setMatches]  = useState<WCMatch[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [source,   setSource]   = useState<DataSource | null>(null);
+  const [updated,  setUpdated]  = useState<Date | null>(null);
+  const [started,  setStarted]  = useState(false);
+  const [apiStandings, setApiStandings] = useState<Record<string, GRow[]> | null>(null);
 
   // Tournament start check
   useEffect(() => {
@@ -71,19 +71,23 @@ export default function Home() {
     return () => clearInterval(t);
   }, []);
 
-  // Load teams once
-  useEffect(() => { fetchTeams().then(setTeams); }, []);
+  // Load static data once
+  useEffect(() => {
+    fetchTeams().then(setTeams);
+    fetchStadiums().then(setStadiums);
+  }, []);
 
   const loadMatches = useCallback(async () => {
     setLoading(true);
-    const res = await fetchMatches();
+    const [res, st] = await Promise.all([fetchMatches(), fetchApiStandings()]);
     if (res) { setMatches(res.matches); setSource(res.source); setUpdated(new Date()); }
+    if (st)  setApiStandings(st);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     loadMatches();
-    const t = setInterval(loadMatches, 120000); // every 2 minutes
+    const t = setInterval(loadMatches, 120000);
     return () => clearInterval(t);
   }, [loadMatches]);
 
@@ -92,16 +96,34 @@ export default function Home() {
     [teams]
   ) as Record<string, WCTeam>;
 
-  const standings = useMemo(() => computeStandings(matches), [matches]);
+  const stadiumMap = useMemo(
+    () => Object.fromEntries(stadiums.map(s => [s.id, s])),
+    [stadiums]
+  ) as Record<string, WCStadium>;
 
-  const liveMatches    = matches.filter(m => m.st === 'live' || m.st === 'ht');
-  const todayMatches   = matches.filter(m => isTodayTehran(m.ld, m.sid));
-  const groupMatches   = matches.filter(m => m.type === 'group');
+  const standings = useMemo(
+    () => apiStandings ?? computeStandings(matches),
+    [apiStandings, matches]
+  );
 
-  // Schedule: group matches by Tehran date
+  const liveMatches  = matches.filter(m => m.st === 'live' || m.st === 'ht');
+  const todayMatches = matches.filter(m => m.ld && m.sid && isTodayTehran(m.ld, m.sid));
+  const groupMatches = matches.filter(m => m.type === 'group');
+
+  const knockoutByPhase = useMemo(() => {
+    const phases: MatchType[] = ['r32','r16','qf','sf','third','final'];
+    const out: Partial<Record<MatchType, WCMatch[]>> = {};
+    for (const p of phases) {
+      const ms = matches.filter(m => m.type === p);
+      if (ms.length) out[p] = ms;
+    }
+    return out;
+  }, [matches]);
+
   const scheduleByDay = useMemo(() => {
     const days: Record<string, WCMatch[]> = {};
     for (const m of groupMatches) {
+      if (!m.ld || !m.sid) continue;
       const day = matchTehranDay(m.ld, m.sid);
       if (!days[day]) days[day] = [];
       days[day].push(m);
@@ -113,10 +135,8 @@ export default function Home() {
     });
   }, [groupMatches]);
 
-
   const card  = `rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`;
   const muted = darkMode ? 'text-gray-500' : 'text-gray-400';
-
   const sourceLabel = source === 'worldcup26' ? '🟢 worldcup26.ir' : source === 'github' ? '🟡 GitHub' : null;
 
   function Flag({ iso2, size = 'md' }: { iso2?: string; size?: 'sm' | 'md' | 'lg' }) {
@@ -125,62 +145,102 @@ export default function Home() {
     return <img src={`https://flagcdn.com/w40/${iso2}.png`} className={`${cls} object-cover rounded-sm flex-shrink-0`} alt="" />;
   }
 
-  function MatchRow({ m, compact }: { m: WCMatch; compact?: boolean }) {
+  function Scorers({ scorers, side }: { scorers: string | null; side: 'home' | 'away' }) {
+    const list = parseScorers(scorers);
+    if (!list.length) return null;
+    return (
+      <div className={`flex flex-col gap-0.5 text-xs ${muted} ${side === 'home' ? 'items-end' : 'items-start'}`}>
+        {list.map((s, i) => (
+          <span key={i} className="flex items-center gap-1">
+            {side === 'away' && <span className="text-emerald-500">⚽</span>}
+            <span>{s}</span>
+            {side === 'home' && <span className="text-emerald-500">⚽</span>}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  function MatchRow({ m, compact, showStadium }: { m: WCMatch; compact?: boolean; showStadium?: boolean }) {
     const ht = teamMap[m.h];
     const at = teamMap[m.a];
     const isIran = m.h === '27' || m.a === '27';
-    const baseRow = `flex items-center px-3 py-3 gap-2 ${isIran && started ? darkMode ? 'bg-emerald-950/20' : 'bg-emerald-50/50' : ''}`;
+    const stad = stadiumMap[m.sid];
+    const hasScorers = (m.hscorers && m.hscorers !== 'null') || (m.ascorers && m.ascorers !== 'null');
+    const baseRow = `px-3 py-2.5 ${isIran && started ? darkMode ? 'bg-emerald-950/20' : 'bg-emerald-50/50' : ''}`;
+
     return (
       <div className={baseRow}>
-        {/* Live indicator */}
-        {m.st === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 live-pulse flex-shrink-0" />}
-        {m.st === 'ht' && <span className={`text-xs font-bold text-yellow-400 flex-shrink-0`}>نیمه</span>}
+        <div className="flex items-center gap-2">
+          {m.st === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 live-pulse flex-shrink-0" />}
+          {m.st === 'ht'   && <span className="text-xs font-bold text-yellow-400 flex-shrink-0">نیمه</span>}
 
-        {/* Home */}
-        <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
-          <span className={`text-xs font-semibold truncate ${ht?.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-            {ht?.fa ?? '—'}
-          </span>
-          <Flag iso2={ht?.iso2} size="sm" />
+          {/* Home */}
+          <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
+            <span className={`text-xs font-semibold truncate ${ht?.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+              {ht?.fa ?? m.hlabel ?? '—'}
+            </span>
+            <Flag iso2={ht?.iso2} size="sm" />
+          </div>
+
+          {/* Score / Time */}
+          <div className="flex flex-col items-center min-w-[64px] flex-shrink-0">
+            {m.st !== 'upcoming' && m.hs !== null && m.as !== null ? (
+              <>
+                <span className={`text-base font-black tabular-nums ${m.st === 'live' ? 'text-red-400' : darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {toPersian(m.hs)} – {toPersian(m.as)}
+                </span>
+                <span className={`text-xs ${m.st === 'live' ? 'text-red-500' : m.st === 'ht' ? 'text-yellow-500' : muted}`}>
+                  {m.st === 'live' && m.min ? `${toPersian(m.min)}'` : m.st === 'ft' ? 'پایان' : ''}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className={`text-sm font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {m.ld && m.sid ? matchTehranTime(m.ld, m.sid) : '—'}
+                </span>
+                {!compact && m.ld && m.sid && (
+                  <span className={`text-xs ${muted}`}>{matchTehranShort(m.ld, m.sid)}</span>
+                )}
+              </>
+            )}
+            {!compact && m.type === 'group' && (
+              <span className={`text-xs ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>گروه {m.g}</span>
+            )}
+          </div>
+
+          {/* Away */}
+          <div className="flex-1 flex items-center gap-2 min-w-0">
+            <Flag iso2={at?.iso2} size="sm" />
+            <span className={`text-xs font-semibold truncate ${at?.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+              {at?.fa ?? m.alabel ?? '—'}
+            </span>
+          </div>
         </div>
 
-        {/* Score / Time */}
-        <div className="flex flex-col items-center min-w-[64px] flex-shrink-0">
-          {m.st !== 'upcoming' && m.hs !== null && m.as !== null ? (
-            <>
-              <span className={`text-base font-black tabular-nums ${m.st === 'live' ? 'text-red-400' : darkMode ? 'text-white' : 'text-gray-900'}`}>
-                {toPersian(m.hs)} – {toPersian(m.as)}
-              </span>
-              <span className={`text-xs ${m.st === 'live' ? 'text-red-500' : m.st === 'ht' ? 'text-yellow-500' : muted}`}>
-                {m.st === 'live' && m.min ? `${toPersian(m.min)}'` : m.st === 'ft' ? 'پایان' : ''}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className={`text-sm font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                {matchTehranTime(m.ld, m.sid)}
-              </span>
-              {!compact && (
-                <span className={`text-xs ${muted}`}>{matchTehranShort(m.ld, m.sid)}</span>
-              )}
-            </>
-          )}
-          {!compact && <span className={`text-xs ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>گروه {m.g}</span>}
-        </div>
+        {/* Goal scorers */}
+        {hasScorers && (
+          <div className="flex justify-between px-1 mt-1.5 gap-2">
+            <Scorers scorers={m.hscorers} side="home" />
+            <Scorers scorers={m.ascorers} side="away" />
+          </div>
+        )}
 
-        {/* Away */}
-        <div className="flex-1 flex items-center gap-2 min-w-0">
-          <Flag iso2={at?.iso2} size="sm" />
-          <span className={`text-xs font-semibold truncate ${at?.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-            {at?.fa ?? '—'}
-          </span>
-        </div>
+        {/* Stadium info */}
+        {showStadium && stad && (
+          <div className={`text-center text-xs mt-1 ${muted}`}>
+            {stad.name_fa} · {stad.city_fa}
+            <span className={`ml-1 ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>
+              {toPersian(stad.capacity / 1000)}k نفر
+            </span>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-4 pb-28 md:pb-6">
+    <div className="max-w-2xl mx-auto px-4 py-4 pb-6">
 
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <div className={`${card} mb-4 overflow-hidden`}>
@@ -204,9 +264,7 @@ export default function Home() {
                 <span className="text-white/70 text-xs">به زودی شروع می‌شود</span>
               )}
               <div className="flex items-center gap-1.5">
-                {sourceLabel && (
-                  <span className="text-white/60 text-xs">{sourceLabel}</span>
-                )}
+                {sourceLabel && <span className="text-white/60 text-xs">{sourceLabel}</span>}
                 <button
                   onClick={loadMatches}
                   disabled={loading}
@@ -275,7 +333,7 @@ export default function Home() {
               </div>
               {liveMatches.map((m, i) => (
                 <div key={m.id} className={i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}>
-                  <MatchRow m={m} />
+                  <MatchRow m={m} showStadium />
                 </div>
               ))}
             </div>
@@ -289,7 +347,7 @@ export default function Home() {
               </div>
               {todayMatches.filter(m => m.st !== 'live' && m.st !== 'ht').map((m, i, arr) => (
                 <div key={m.id} className={i < arr.length - 1 ? `border-b ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}>
-                  <MatchRow m={m} />
+                  <MatchRow m={m} showStadium />
                 </div>
               ))}
             </div>
@@ -298,11 +356,10 @@ export default function Home() {
           {/* No matches today → show upcoming + recent */}
           {todayMatches.length === 0 && !loading && (
             <>
-              {/* Next upcoming */}
               {(() => {
                 const now = Date.now();
                 const upcoming = matches
-                  .filter(m => m.st === 'upcoming' && matchUtcDate(m.ld, m.sid).getTime() > now)
+                  .filter(m => m.st === 'upcoming' && m.ld && m.sid && matchUtcDate(m.ld, m.sid).getTime() > now)
                   .sort((a, b) => matchUtcDate(a.ld, a.sid).getTime() - matchUtcDate(b.ld, b.sid).getTime())
                   .slice(0, 6);
                 if (!upcoming.length) return null;
@@ -313,14 +370,13 @@ export default function Home() {
                     </div>
                     {upcoming.map((m, i) => (
                       <div key={m.id} className={i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}>
-                        <MatchRow m={m} />
+                        <MatchRow m={m} showStadium />
                       </div>
                     ))}
                   </div>
                 );
               })()}
 
-              {/* Recent results */}
               {(() => {
                 const recent = matches
                   .filter(m => m.st === 'ft')
@@ -381,8 +437,8 @@ export default function Home() {
           {/* Standings */}
           <div className={`${card} overflow-hidden mb-3`}>
             <div className={`px-4 py-3 border-b font-bold text-sm flex items-center justify-between ${darkMode ? 'border-gray-800 text-gray-100' : 'border-gray-100 text-gray-900'}`}>
-              <span>گروه {selGroup}</span>
-              {source && <span className={`text-xs font-normal ${muted}`}>{sourceLabel}</span>}
+              <span>جدول گروه {selGroup}</span>
+              {sourceLabel && <span className={`text-xs font-normal ${muted}`}>{sourceLabel}</span>}
             </div>
             <table className="w-full text-xs">
               <thead>
@@ -437,7 +493,7 @@ export default function Home() {
                 </div>
                 {ms.map((m, i) => (
                   <div key={m.id} className={i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}>
-                    <MatchRow m={m} />
+                    <MatchRow m={m} showStadium />
                   </div>
                 ))}
               </div>
@@ -458,38 +514,68 @@ export default function Home() {
               </div>
               {dayMatches
                 .sort((a, b) => matchUtcDate(a.ld, a.sid).getTime() - matchUtcDate(b.ld, b.sid).getTime())
-                .map((m, i) => (
-                  <div key={m.id} className={i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}>
-                    <div className="flex items-center px-3 py-3 gap-2">
-                      {m.st === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 live-pulse flex-shrink-0" />}
-                      <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
-                        <span className={`text-xs font-semibold truncate ${teamMap[m.h]?.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                          {teamMap[m.h]?.fa ?? '—'}
-                        </span>
-                        <Flag iso2={teamMap[m.h]?.iso2} size="sm" />
-                      </div>
-                      <div className="flex flex-col items-center min-w-[72px] flex-shrink-0">
-                        {m.st !== 'upcoming' && m.hs !== null ? (
-                          <span className={`text-base font-black tabular-nums ${m.st === 'live' ? 'text-red-400' : darkMode ? 'text-white' : 'text-gray-900'}`}>
-                            {toPersian(m.hs!)} – {toPersian(m.as!)}
-                          </span>
-                        ) : (
-                          <span className={`text-sm font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                            {matchTehranTime(m.ld, m.sid)}
-                          </span>
+                .map((m, i) => {
+                  const stad = stadiumMap[m.sid];
+                  return (
+                    <div key={m.id} className={i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}>
+                      <div className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          {m.st === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 live-pulse flex-shrink-0" />}
+                          <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
+                            <span className={`text-xs font-semibold truncate ${teamMap[m.h]?.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                              {teamMap[m.h]?.fa ?? '—'}
+                            </span>
+                            <Flag iso2={teamMap[m.h]?.iso2} size="sm" />
+                          </div>
+                          <div className="flex flex-col items-center min-w-[72px] flex-shrink-0">
+                            {m.st !== 'upcoming' && m.hs !== null ? (
+                              <span className={`text-base font-black tabular-nums ${m.st === 'live' ? 'text-red-400' : darkMode ? 'text-white' : 'text-gray-900'}`}>
+                                {toPersian(m.hs!)} – {toPersian(m.as!)}
+                              </span>
+                            ) : (
+                              <span className={`text-sm font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                                {matchTehranTime(m.ld, m.sid)}
+                              </span>
+                            )}
+                            <span className={`text-xs ${muted}`}>گروه {m.g} · هفته {toPersian(m.md)}</span>
+                            {stad && (
+                              <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                                {stad.city_fa}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-1 flex items-center gap-2 min-w-0">
+                            <Flag iso2={teamMap[m.a]?.iso2} size="sm" />
+                            <span className={`text-xs font-semibold truncate ${teamMap[m.a]?.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                              {teamMap[m.a]?.fa ?? '—'}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Scorers */}
+                        {(m.hscorers || m.ascorers) && (
+                          <div className="flex justify-between px-1 mt-1 gap-2">
+                            <div className={`flex flex-col gap-0.5 text-xs ${muted} items-end`}>
+                              {parseScorers(m.hscorers).map((s, i) => (
+                                <span key={i}>{s} ⚽</span>
+                              ))}
+                            </div>
+                            <div className={`flex flex-col gap-0.5 text-xs ${muted} items-start`}>
+                              {parseScorers(m.ascorers).map((s, i) => (
+                                <span key={i}>⚽ {s}</span>
+                              ))}
+                            </div>
+                          </div>
                         )}
-                        <span className={`text-xs ${muted}`}>گروه {m.g} · هفته {toPersian(m.md)}</span>
-                        <span className={`text-xs ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>{STD_NAMES[m.sid]}</span>
-                      </div>
-                      <div className="flex-1 flex items-center gap-2 min-w-0">
-                        <Flag iso2={teamMap[m.a]?.iso2} size="sm" />
-                        <span className={`text-xs font-semibold truncate ${teamMap[m.a]?.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                          {teamMap[m.a]?.fa ?? '—'}
-                        </span>
+                        {/* Stadium full info */}
+                        {stad && (
+                          <div className={`text-center text-xs mt-1 ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>
+                            {stad.name_fa} · {toPersian(stad.capacity / 1000)}k نفر
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           ))}
         </div>
@@ -500,39 +586,68 @@ export default function Home() {
       {/* ══════════════════════════════════════════════════════════════════ */}
       {tab === 'bracket' && (
         <div className="space-y-3">
-          <div className={`${card} p-4 text-center`}>
-            <p className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>مرحله گروهی</p>
-            <p className={`text-xs mt-1 ${muted}`}>۱۱ – ۲۷ جون · ۷۲ بازی · ۱۲ گروه × ۴ تیم</p>
-            <p className={`text-xs mt-0.5 ${darkMode ? 'text-gray-600' : 'text-gray-300'}`}>۳۲ تیم صعود · ۲ اول هر گروه + ۸ سوم برتر</p>
+          {/* Group stage summary */}
+          <div className={`${card} p-4`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>مرحله گروهی</p>
+                <p className={`text-xs mt-0.5 ${muted}`}>۱۱ – ۲۷ جون · ۷۲ بازی · ۱۲ گروه</p>
+              </div>
+              <div className="text-left">
+                <p className={`text-xs ${muted}`}>
+                  {toPersian(groupMatches.filter(m => m.st === 'ft').length)} از {toPersian(groupMatches.length)} بازی
+                </p>
+              </div>
+            </div>
           </div>
-          {KNOCKOUT_PHASES.map(phase => (
-            <div
-              key={phase.tp}
-              className={`${card} p-4 ${phase.tp === 'final' ? darkMode ? 'border-yellow-800/50 bg-yellow-950/20' : 'border-yellow-300 bg-yellow-50' : ''}`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  {phase.tp === 'final'
-                    ? <Trophy size={18} className="text-yellow-400 flex-shrink-0" />
-                    : <Shield size={16} className={`flex-shrink-0 ${muted}`} />
-                  }
-                  <div>
-                    <p className={`text-sm font-bold ${phase.tp === 'final' ? 'text-yellow-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                      {phase.phase}
-                    </p>
-                    <p className={`text-xs ${muted}`}>{phase.en}</p>
+
+          {/* Knockout phases */}
+          {(['r32','r16','qf','sf','third','final'] as MatchType[]).map(phase => {
+            const phaseMatches = knockoutByPhase[phase] ?? [];
+            const info = PHASE_LABEL[phase];
+            const isFinal = phase === 'final';
+            const hasStarted = phaseMatches.some(m => m.st === 'live' || m.st === 'ft');
+
+            return (
+              <div
+                key={phase}
+                className={`${card} overflow-hidden ${isFinal ? darkMode ? 'border-yellow-800/50' : 'border-yellow-300' : ''}`}
+              >
+                {/* Phase header */}
+                <div className={`flex items-center justify-between px-4 py-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
+                  <div className="flex items-center gap-2.5">
+                    {isFinal
+                      ? <Trophy size={16} className="text-yellow-400 flex-shrink-0" />
+                      : <Shield size={14} className={`flex-shrink-0 ${muted}`} />
+                    }
+                    <div>
+                      <p className={`text-sm font-bold ${isFinal ? 'text-yellow-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                        {info.fa}
+                      </p>
+                      <p className={`text-xs ${muted}`}>{info.dates}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {hasStarted && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
+                    <span className={`text-xs ${muted}`}>{toPersian(info.matches)} بازی</span>
                   </div>
                 </div>
-                <div className="text-left">
-                  <p className={`text-xs font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{phase.dates}</p>
-                  <p className={`text-xs ${muted}`}>{toPersian(phase.matches)} بازی</p>
-                </div>
+
+                {/* Matches in phase */}
+                {phaseMatches.length > 0 ? (
+                  phaseMatches.map((m, i) => (
+                    <div key={m.id} className={i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}>
+                      <MatchRow m={m} showStadium />
+                    </div>
+                  ))
+                ) : (
+                  <div className={`px-4 py-3 text-xs text-center ${muted}`}>
+                    در انتظار نتایج مرحله قبل
+                  </div>
+                )}
               </div>
-              <p className={`text-xs mt-2 pt-2 border-t text-center ${darkMode ? 'border-gray-800 text-gray-700' : 'border-gray-100 text-gray-300'}`}>
-                {phase.tp === 'final' ? 'MetLife Stadium · نیویورک · ۱۹ جولای' : 'در انتظار نتایج مرحله قبل'}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -557,8 +672,9 @@ export default function Home() {
             ))}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {teams.filter(t => confFilter === 'all' || CONF_MAP[t.code] === confFilter || t.group === confFilter).map(team => {
+            {teams.filter(t => confFilter === 'all' || CONF_MAP[t.code] === confFilter).map(team => {
               const conf = CONF_MAP[team.code] ?? 'UEFA';
+              const groupRow = (standings[team.group] ?? []).find(r => r.teamId === team.id);
               return (
                 <div
                   key={team.id}
@@ -569,11 +685,11 @@ export default function Home() {
                   }`}
                 >
                   <img
-                    src={`https://flagcdn.com/w40/${team.iso2}.png`}
+                    src={team.flag || `https://flagcdn.com/w40/${team.iso2}.png`}
                     alt={team.fa}
                     className="w-10 h-7 object-cover rounded shadow-sm flex-shrink-0"
                   />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className={`text-xs font-bold truncate ${team.id === '27' ? 'text-emerald-400' : darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
                       {team.fa}
                     </p>
@@ -581,6 +697,11 @@ export default function Home() {
                       <span className={`text-xs px-1 py-0.5 rounded border ${CONF_CL[conf] ?? ''}`}>{conf}</span>
                       <span className={`text-xs ${muted}`}>گروه {team.group}</span>
                     </div>
+                    {groupRow && groupRow.mp > 0 && (
+                      <p className={`text-xs mt-0.5 ${muted}`}>
+                        {toPersian(groupRow.mp)} بازی · {toPersian(groupRow.pts)} امتیاز
+                      </p>
+                    )}
                   </div>
                 </div>
               );
@@ -591,4 +712,3 @@ export default function Home() {
     </div>
   );
 }
-
