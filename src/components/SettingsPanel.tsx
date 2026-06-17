@@ -1,4 +1,5 @@
-import { X, Moon, Sun, RefreshCw, Info } from 'lucide-react';
+import { X, Moon, Sun, RefreshCw, Info, Bell, BellOff, Download } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 
 const INTERVALS = [
@@ -10,6 +11,30 @@ const INTERVALS = [
 
 export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { darkMode, toggleDarkMode, refreshInterval, setRefreshInterval } = useApp();
+  const [notifPerm, setNotifPerm] = useState<string>(() => {
+    try { return Notification.permission; } catch { return 'default'; }
+  });
+  const [deferredPrompt, setDeferredPrompt] = useState<Event | null>(null);
+  const [installable, setInstallable] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => { e.preventDefault(); setDeferredPrompt(e); setInstallable(true); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  async function requestNotif() {
+    if (!('Notification' in window)) return;
+    const perm = await Notification.requestPermission();
+    setNotifPerm(perm);
+  }
+
+  async function installApp() {
+    if (!deferredPrompt) return;
+    (deferredPrompt as any).prompt();
+    const { outcome } = await (deferredPrompt as any).userChoice;
+    if (outcome === 'accepted') setInstallable(false);
+  }
 
   return (
     <>
@@ -84,6 +109,54 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
               ))}
             </div>
           </div>
+
+          {/* Notifications */}
+          {'Notification' in window && (
+            <div className={`flex items-center justify-between p-4 rounded-2xl ${darkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+              <div className="flex items-center gap-3">
+                {notifPerm === 'granted'
+                  ? <Bell size={20} className="text-emerald-400" />
+                  : <BellOff size={20} className={darkMode ? 'text-gray-500' : 'text-gray-400'} />
+                }
+                <div>
+                  <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>اعلان بازی ایران</p>
+                  <p className={`text-xs mt-0.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    {notifPerm === 'granted' ? 'فعال — ۱۵ دقیقه قبل از بازی' : notifPerm === 'denied' ? 'مسدود شده در مرورگر' : 'دریافت اطلاع‌رسانی'}
+                  </p>
+                </div>
+              </div>
+              {notifPerm === 'default' && (
+                <button
+                  onClick={requestNotif}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+                >
+                  فعال‌سازی
+                </button>
+              )}
+              {notifPerm === 'granted' && (
+                <span className="text-emerald-400 text-lg">✓</span>
+              )}
+            </div>
+          )}
+
+          {/* Install PWA */}
+          {installable && (
+            <div className={`flex items-center justify-between p-4 rounded-2xl ${darkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+              <div className="flex items-center gap-3">
+                <Download size={20} className="text-blue-400" />
+                <div>
+                  <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>نصب اپلیکیشن</p>
+                  <p className={`text-xs mt-0.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>نصب روی صفحه اصلی گوشی</p>
+                </div>
+              </div>
+              <button
+                onClick={installApp}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+              >
+                نصب
+              </button>
+            </div>
+          )}
 
           {/* About */}
           <div className={`p-4 rounded-2xl ${darkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>

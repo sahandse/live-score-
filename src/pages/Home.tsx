@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { RefreshCw, Trophy, Shield } from 'lucide-react';
+import { RefreshCw, Trophy, Shield, Share2, Bell, BellOff } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
 import {
@@ -8,6 +8,7 @@ import {
   parseScorers,
   type WCTeam, type WCMatch, type WCStadium, type GRow, type MatchType,
 } from '../services/wcApi';
+import { fetchWeatherForMatches, type WeatherData } from '../services/weatherApi';
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
@@ -52,10 +53,17 @@ const VIDEO_MAP: Record<string, string> = {
   'MEX-RSA': 'https://video-vcdn.varzesh3.com/videos-quality/2026/06/12/A/0lgin4nu.mp4',
 };
 
+// ─── Module-level helpers ─────────────────────────────────────────────────────
+function padPer(n: number): string {
+  return n < 10 ? `۰${toPersian(n)}` : toPersian(n);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 export default function Home() {
   const { darkMode, tab, refreshInterval } = useApp();
-  const [selGroup, setSelGroup]  = useState('A');
+  const [selGroup, setSelGroup]     = useState('A');
   const [confFilter, setConfFilter] = useState('all');
+  const [liveFilter, setLiveFilter] = useState<'all' | 'iran' | 'live'>('all');
 
   const [teams,    setTeams]    = useState<WCTeam[]>([]);
   const [stadiums, setStadiums] = useState<WCStadium[]>([]);
@@ -64,6 +72,14 @@ export default function Home() {
   const [updated,  setUpdated]  = useState<Date | null>(null);
   const [started,  setStarted]  = useState(false);
   const [apiStandings, setApiStandings] = useState<Record<string, GRow[]> | null>(null);
+
+  // New features state
+  const [weatherMap,  setWeatherMap]  = useState<Record<string, WeatherData>>({});
+  const [countdown,   setCountdown]   = useState('');
+  const [shareToast,  setShareToast]  = useState(false);
+  const [notifPerm,   setNotifPerm]   = useState<string>(() => {
+    try { return Notification.permission; } catch { return 'default'; }
+  });
 
   // Tournament start check
   useEffect(() => {
@@ -112,6 +128,66 @@ export default function Home() {
   const todayMatches = matches.filter(m => m.ld && m.sid && isTodayTehran(m.ld, m.sid));
   const groupMatches = matches.filter(m => m.type === 'group');
 
+  // ─── Iran countdown ──────────────────────────────────────────────────────────
+  const nextIranMatch = useMemo(() => {
+    const now = Date.now();
+    return matches
+      .filter(m => (m.h === '27' || m.a === '27') && m.st === 'upcoming' && m.ld && m.sid)
+      .sort((a, b) => matchUtcDate(a.ld, a.sid).getTime() - matchUtcDate(b.ld, b.sid).getTime())
+      .find(m => matchUtcDate(m.ld, m.sid).getTime() > now) ?? null;
+  }, [matches]);
+
+  useEffect(() => {
+    if (!nextIranMatch) { setCountdown(''); return; }
+    const update = () => {
+      const diff = matchUtcDate(nextIranMatch.ld, nextIranMatch.sid).getTime() - Date.now();
+      if (diff <= 0) { setCountdown(''); return; }
+      const h = Math.floor(diff / 3_600_000);
+      const m = Math.floor((diff % 3_600_000) / 60_000);
+      const s = Math.floor((diff % 60_000) / 1_000);
+      setCountdown(`${padPer(h)}:${padPer(m)}:${padPer(s)}`);
+    };
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, [nextIranMatch]);
+
+  // ─── Top scorers ─────────────────────────────────────────────────────────────
+  const topScorers = useMemo(() => {
+    const map: Record<string, { name: string; goals: number }> = {};
+    for (const m of matches) {
+      if (m.st !== 'ft' && m.st !== 'live') continue;
+      [...parseScorers(m.hscorers), ...parseScorers(m.ascorers)].forEach(raw => {
+        const name = raw.replace(/\s+\d+[''′]?\s*$/, '').trim();
+        if (!name) return;
+        if (!map[name]) map[name] = { name, goals: 0 };
+        map[name].goals += 1;
+      });
+    }
+    return Object.values(map).sort((a, b) => b.goals - a.goals).slice(0, 10);
+  }, [matches]);
+
+  // ─── Weather ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!started) return;
+    const sids = [...new Set([
+      ...todayMatches.map(m => m.sid),
+      ...matches.filter(m => m.st === 'upcoming').slice(0, 6).map(m => m.sid),
+    ])].filter(Boolean);
+    if (sids.length) fetchWeatherForMatches(sids).then(setWeatherMap);
+  }, [started, matches.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Live tab filters ─────────────────────────────────────────────────────────
+  const filteredLive = liveFilter === 'iran'
+    ? liveMatches.filter(m => m.h === '27' || m.a === '27')
+    : liveMatches;
+
+  const filteredToday = liveFilter === 'iran'
+    ? todayMatches.filter(m => m.h === '27' || m.a === '27')
+    : liveFilter === 'live'
+      ? todayMatches.filter(m => m.st === 'live' || m.st === 'ht')
+      : todayMatches;
+
   const knockoutByPhase = useMemo(() => {
     const phases: MatchType[] = ['r32','r16','qf','sf','third','final'];
     const out: Partial<Record<MatchType, WCMatch[]>> = {};
@@ -140,6 +216,44 @@ export default function Home() {
   const card  = `rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`;
   const muted = darkMode ? 'text-gray-500' : 'text-gray-400';
 
+  // ─── Share ────────────────────────────────────────────────────────────────────
+  function doShare(m: WCMatch, ht?: WCTeam, at?: WCTeam) {
+    const home = ht?.fa ?? m.hlabel ?? '؟';
+    const away = at?.fa ?? m.alabel ?? '؟';
+    const text = m.st === 'ft'
+      ? `${home} ${toPersian(m.hs ?? 0)} - ${toPersian(m.as ?? 0)} ${away} | جام جهانی ۲۰۲۶`
+      : `${home} - ${away} | ${m.ld && m.sid ? matchTehranTime(m.ld, m.sid) : ''} | جام جهانی ۲۰۲۶`;
+    if (navigator.share) {
+      navigator.share({ title: 'جام جهانی ۲۰۲۶', text, url: window.location.href }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(text).catch(() => {});
+      setShareToast(true);
+      setTimeout(() => setShareToast(false), 2200);
+    }
+  }
+
+  // ─── Notifications ────────────────────────────────────────────────────────────
+  async function requestNotif() {
+    if (!('Notification' in window)) return;
+    const perm = await Notification.requestPermission();
+    setNotifPerm(perm);
+    if (perm === 'granted' && nextIranMatch) {
+      const matchTime = matchUtcDate(nextIranMatch.ld, nextIranMatch.sid).getTime();
+      const delay = matchTime - 15 * 60 * 1000 - Date.now();
+      const ht = teamMap[nextIranMatch.h];
+      const at = teamMap[nextIranMatch.a];
+      if (delay > 0 && delay < 23 * 3_600_000) {
+        setTimeout(() => {
+          new Notification('⚽ بازی ایران ۱۵ دقیقه دیگر!', {
+            body: `${ht?.fa ?? '؟'} در مقابل ${at?.fa ?? '؟'} | جام جهانی ۲۰۲۶`,
+            icon: '/favicon.svg',
+          });
+        }, delay);
+      }
+    }
+  }
+
+  // ─── Sub-components ───────────────────────────────────────────────────────────
   function Flag({ iso2, size = 'md' }: { iso2?: string; size?: 'sm' | 'md' | 'lg' }) {
     if (!iso2) return <span className={size === 'lg' ? 'text-3xl' : size === 'md' ? 'text-xl' : 'text-base'}>🏳️</span>;
     const cls = size === 'lg' ? 'w-12 h-8' : size === 'md' ? 'w-8 h-5' : 'w-6 h-4';
@@ -167,6 +281,7 @@ export default function Home() {
     const at = teamMap[m.a];
     const isIran = m.h === '27' || m.a === '27';
     const stad = stadiumMap[m.sid];
+    const weather = m.st === 'upcoming' && m.sid ? weatherMap[m.sid] : undefined;
     const hasScorers = (m.hscorers && m.hscorers !== 'null') || (m.ascorers && m.ascorers !== 'null');
     const baseRow = `px-3 py-2.5 ${isIran && started ? darkMode ? 'bg-emerald-950/20' : 'bg-emerald-50/50' : ''}`;
 
@@ -217,6 +332,14 @@ export default function Home() {
               {at?.fa ?? m.alabel ?? '—'}
             </span>
           </div>
+
+          {/* Share */}
+          <button
+            onClick={() => doShare(m, ht, at)}
+            className={`p-1 rounded-lg flex-shrink-0 transition-colors ${darkMode ? 'text-gray-700 hover:text-gray-400 active:text-gray-300' : 'text-gray-300 hover:text-gray-500 active:text-gray-700'}`}
+          >
+            <Share2 size={12} />
+          </button>
         </div>
 
         {/* Goal scorers */}
@@ -227,13 +350,17 @@ export default function Home() {
           </div>
         )}
 
-        {/* Stadium info */}
+        {/* Stadium + weather */}
         {showStadium && stad && (
-          <div className={`text-center text-xs mt-1 ${muted}`}>
-            {stad.name_fa} · {stad.city_fa}
-            <span className={`ml-1 ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>
-              {toPersian(stad.capacity / 1000)}k نفر
-            </span>
+          <div className={`flex items-center justify-center gap-2 text-xs mt-1 ${muted}`}>
+            <span>{stad.name_fa} · {stad.city_fa}</span>
+            <span className={darkMode ? 'text-gray-700' : 'text-gray-300'}>{toPersian(stad.capacity / 1000)}k نفر</span>
+            {weather && (
+              <span className="flex items-center gap-0.5 text-sky-400">
+                <span>{weather.icon}</span>
+                <span>{toPersian(weather.temp)}°</span>
+              </span>
+            )}
           </div>
         )}
 
@@ -250,12 +377,7 @@ export default function Home() {
                       خلاصه بازی — ورزش سه
                     </span>
                   </div>
-                  <video
-                    controls
-                    preload="metadata"
-                    className="w-full max-h-52 bg-black"
-                    controlsList="nodownload"
-                  >
+                  <video controls preload="metadata" className="w-full max-h-52 bg-black" controlsList="nodownload">
                     <source src={videoUrl} type="video/mp4" />
                   </video>
                 </div>
@@ -291,8 +413,16 @@ export default function Home() {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-2xl mx-auto px-4 py-4 pb-6">
+
+      {/* Share toast */}
+      {shareToast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xl animate-bounce">
+          لینک کپی شد ✓
+        </div>
+      )}
 
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <div className={`${card} mb-4 overflow-hidden`}>
@@ -337,22 +467,92 @@ export default function Home() {
       {/* ══════════════════════════════════════════════════════════════════ */}
       {tab === 'live' && (
         <div className="space-y-3">
+
+          {/* ── Iran countdown banner ──────────────────────────────────── */}
+          {nextIranMatch && countdown && (() => {
+            const ht = teamMap[nextIranMatch.h];
+            const at = teamMap[nextIranMatch.a];
+            return (
+              <div className={`${card} overflow-hidden`}>
+                <div className="bg-gradient-to-r from-emerald-900/80 via-green-900/60 to-emerald-900/80 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <span className="text-emerald-400 text-xs font-bold">💚 بازی بعدی ایران</span>
+                      <div className="flex items-center gap-2">
+                        <Flag iso2={ht?.iso2} size="sm" />
+                        <span className="text-white text-xs font-semibold">{ht?.fa ?? '—'}</span>
+                        <span className={`text-xs ${muted}`}>vs</span>
+                        <span className="text-white text-xs font-semibold">{at?.fa ?? '—'}</span>
+                        <Flag iso2={at?.iso2} size="sm" />
+                      </div>
+                      {nextIranMatch.ld && nextIranMatch.sid && (
+                        <span className={`text-xs ${muted}`}>{matchTehranDay(nextIranMatch.ld, nextIranMatch.sid)}</span>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-center flex-shrink-0">
+                      <span className="text-emerald-300 text-2xl font-black tabular-nums tracking-wide">{countdown}</span>
+                      <span className={`text-xs ${muted}`}>مانده تا بازی</span>
+                      {notifPerm !== 'granted' && 'Notification' in window && (
+                        <button
+                          onClick={requestNotif}
+                          className="mt-1.5 flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-bold hover:bg-emerald-500/30 transition-colors"
+                        >
+                          <Bell size={10} />
+                          <span>اعلان</span>
+                        </button>
+                      )}
+                      {notifPerm === 'granted' && (
+                        <span className="mt-1 text-xs text-emerald-500 flex items-center gap-1">
+                          <BellOff size={10} />یادآور فعال
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ── Live filter chips ──────────────────────────────────────── */}
+          <div className="flex gap-2">
+            {([['all','همه'], ['live','زنده'], ['iran','ایران 💚']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setLiveFilter(id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  liveFilter === id
+                    ? id === 'iran' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+                    : darkMode ? 'bg-gray-800 text-gray-400 hover:text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {id === 'live' && liveMatches.length > 0 && liveFilter !== 'live' && (
+                  <span className="mr-1 inline-block w-1.5 h-1.5 rounded-full bg-red-500 live-pulse" />
+                )}
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Skeleton loading ──────────────────────────────────────── */}
           {loading && matches.length === 0 && (
             <div className="space-y-3">
               {[1,2,3].map(i => (
-                <div key={i} className={`h-16 rounded-2xl animate-pulse ${darkMode ? 'bg-gray-800' : 'bg-gray-200'}`} />
+                <div key={i} className={`rounded-2xl overflow-hidden border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+                  <div className={`h-14 animate-pulse ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`} />
+                  <div className={`h-10 animate-pulse ${darkMode ? 'bg-gray-850' : 'bg-gray-50'}`} style={{ animationDelay: `${i * 100}ms` }} />
+                </div>
               ))}
             </div>
           )}
 
           {/* Live now */}
-          {liveMatches.length > 0 && (
+          {filteredLive.length > 0 && (
             <div className={`${card} overflow-hidden`}>
               <div className={`flex items-center gap-2 px-4 py-2.5 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
                 <span className="w-2 h-2 rounded-full bg-red-500 live-pulse" />
                 <span className={`text-sm font-bold ${darkMode ? 'text-red-400' : 'text-red-600'}`}>الان زنده</span>
               </div>
-              {liveMatches.map((m, i) => (
+              {filteredLive.map((m, i) => (
                 <div key={m.id} className={i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}>
                   <MatchRow m={m} showStadium />
                 </div>
@@ -361,12 +561,12 @@ export default function Home() {
           )}
 
           {/* Today */}
-          {todayMatches.filter(m => m.st !== 'live' && m.st !== 'ht').length > 0 && (
+          {filteredToday.filter(m => m.st !== 'live' && m.st !== 'ht').length > 0 && (
             <div className={`${card} overflow-hidden`}>
               <div className={`px-4 py-2.5 border-b text-xs font-bold ${darkMode ? 'border-gray-800 text-gray-500' : 'border-gray-100 text-gray-400'}`}>
                 بازی‌های امروز
               </div>
-              {todayMatches.filter(m => m.st !== 'live' && m.st !== 'ht').map((m, i, arr) => (
+              {filteredToday.filter(m => m.st !== 'live' && m.st !== 'ht').map((m, i, arr) => (
                 <div key={m.id} className={i < arr.length - 1 ? `border-b ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}>
                   <MatchRow m={m} showStadium />
                 </div>
@@ -375,11 +575,14 @@ export default function Home() {
           )}
 
           {/* No matches today → show upcoming + recent */}
-          {todayMatches.length === 0 && !loading && (
+          {filteredToday.length === 0 && !loading && (
             <>
               {(() => {
                 const now = Date.now();
-                const upcoming = matches
+                const upcoming = (liveFilter === 'iran'
+                  ? matches.filter(m => m.h === '27' || m.a === '27')
+                  : matches
+                )
                   .filter(m => m.st === 'upcoming' && m.ld && m.sid && matchUtcDate(m.ld, m.sid).getTime() > now)
                   .sort((a, b) => matchUtcDate(a.ld, a.sid).getTime() - matchUtcDate(b.ld, b.sid).getTime())
                   .slice(0, 6);
@@ -399,7 +602,10 @@ export default function Home() {
               })()}
 
               {(() => {
-                const recent = matches
+                const recent = (liveFilter === 'iran'
+                  ? matches.filter(m => m.h === '27' || m.a === '27')
+                  : matches
+                )
                   .filter(m => m.st === 'ft')
                   .sort((a, b) => matchUtcDate(b.ld, b.sid).getTime() - matchUtcDate(a.ld, a.sid).getTime())
                   .slice(0, 6);
@@ -519,6 +725,29 @@ export default function Home() {
               </div>
             );
           })}
+
+          {/* ── Top scorers ──────────────────────────────────────────── */}
+          {topScorers.length > 0 && (
+            <div className={`${card} overflow-hidden mt-1`}>
+              <div className={`px-4 py-3 border-b text-sm font-bold ${darkMode ? 'border-gray-800 text-gray-100' : 'border-gray-100 text-gray-900'}`}>
+                ⚽ برترین گل‌زنان
+              </div>
+              <div className="py-1">
+                {topScorers.map((s, i) => (
+                  <div key={s.name} className={`flex items-center gap-3 px-4 py-2 ${i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}`}>
+                    <span className={`text-xs font-black w-5 text-center ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-300' : i === 2 ? 'text-amber-600' : muted}`}>
+                      {toPersian(i + 1)}
+                    </span>
+                    <span className={`flex-1 text-xs font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{s.name}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs">⚽</span>
+                      <span className={`text-xs font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{toPersian(s.goals)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -570,8 +799,13 @@ export default function Home() {
                               {teamMap[m.a]?.fa ?? '—'}
                             </span>
                           </div>
+                          <button
+                            onClick={() => doShare(m, teamMap[m.h], teamMap[m.a])}
+                            className={`p-1 rounded-lg flex-shrink-0 transition-colors ${darkMode ? 'text-gray-700 hover:text-gray-400' : 'text-gray-300 hover:text-gray-500'}`}
+                          >
+                            <Share2 size={12} />
+                          </button>
                         </div>
-                        {/* Scorers */}
                         {(m.hscorers || m.ascorers) && (
                           <div className="flex justify-between px-1 mt-1 gap-2">
                             <div className={`flex flex-col gap-0.5 text-xs ${muted} items-end`}>
@@ -586,7 +820,6 @@ export default function Home() {
                             </div>
                           </div>
                         )}
-                        {/* Stadium full info */}
                         {stad && (
                           <div className={`text-center text-xs mt-1 ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>
                             {stad.name_fa} · {toPersian(stad.capacity / 1000)}k نفر
@@ -633,7 +866,6 @@ export default function Home() {
                 key={phase}
                 className={`${card} overflow-hidden ${isFinal ? darkMode ? 'border-yellow-800/50' : 'border-yellow-300' : ''}`}
               >
-                {/* Phase header */}
                 <div className={`flex items-center justify-between px-4 py-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
                   <div className="flex items-center gap-2.5">
                     {isFinal
@@ -653,7 +885,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Matches in phase */}
                 {phaseMatches.length > 0 ? (
                   phaseMatches.map((m, i) => (
                     <div key={m.id} className={i > 0 ? `border-t ${darkMode ? 'border-gray-800' : 'border-gray-50'}` : ''}>
