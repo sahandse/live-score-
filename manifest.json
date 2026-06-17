@@ -1,0 +1,17 @@
+{
+  "name": "جام جهانی ۲۰۲۶ FIFA",
+  "short_name": "WC ۲۰۲۶",
+  "description": "نتایج زنده و اطلاعات کامل جام جهانی ۲۰۲۶ FIFA",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#10b981",
+  "dir": "rtl",
+  "lang": "fa",
+  "categories": ["sports"],
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "screenshots": [],
+  "orientation": "portrait"
+}
