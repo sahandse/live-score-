@@ -1,19 +1,17 @@
-// ESPN unofficial API — no key needed, CORS-open from any browser origin
-const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
+// Free Football Live Scores API by rezarahiminia — open-source, MongoDB-backed,
+// provider-compatible REST API for real football data (no key needed, CORS-open).
+// Source: https://github.com/rezarahiminia/livescoreFootball
+// Docs:   https://worldcup26.ir/football-api
+const BASE = 'https://worldcup26.ir/get/soccer';
 
-const ALL_LEAGUES = [
-  'eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1',
-  'uefa.champions_league', 'uefa.europa', 'ned.1', 'por.1',
-];
-const TOP_LEAGUES = ['eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1'];
+// Leagues confirmed covered by the service as of this writing (see the project's
+// README — England and Spain are the first production targets). Used only as a
+// fallback if the live league catalog can't be fetched.
+const FALLBACK_LEAGUES = ['eng.1', 'esp.1'];
 
-function toEspnDate(d: Date): string {
-  return d.toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-async function espnGet<T>(path: string): Promise<T | null> {
+async function apiGet<T>(path: string): Promise<T | null> {
   try {
-    const r = await fetch(`${ESPN}/${path}`);
+    const r = await fetch(`${BASE}/${path}`);
     if (!r.ok) return null;
     return r.json() as Promise<T>;
   } catch {
@@ -21,17 +19,49 @@ async function espnGet<T>(path: string): Promise<T | null> {
   }
 }
 
-function mapStatus(name: string): string {
-  switch (name) {
-    case 'STATUS_IN_PROGRESS': return 'IN_PLAY';
-    case 'STATUS_HALFTIME':    return 'PAUSED';
-    case 'STATUS_FINAL':
-    case 'STATUS_FULL_TIME':   return 'FINISHED';
-    default:                   return 'SCHEDULED';
-  }
+function toDateKey(d: Date): string {
+  return d.toISOString().slice(0, 10).replace(/-/g, '');
 }
 
-// ─── Exported types (same shape as before) ──────────────────────────────────
+// The service publishes exactly which leagues currently have stored data via
+// `/leagues?available=true`; querying it keeps the app honest about what's real.
+let leagueCatalogCache: { slugs: string[]; ts: number } | null = null;
+const CATALOG_TTL = 5 * 60_000;
+
+async function getAvailableLeagueSlugs(): Promise<string[]> {
+  if (leagueCatalogCache && Date.now() - leagueCatalogCache.ts < CATALOG_TTL) {
+    return leagueCatalogCache.slugs;
+  }
+  const d = await apiGet<{ leagues: { slug: string }[] }>('leagues?kind=club&available=true');
+  const slugs = d?.leagues?.length ? d.leagues.map(l => l.slug) : FALLBACK_LEAGUES;
+  leagueCatalogCache = { slugs, ts: Date.now() };
+  return slugs;
+}
+
+function mapStatus(state: string, name: string): string {
+  if (state === 'post') return 'FINISHED';
+  if (state === 'in') return /HALF/i.test(name) ? 'PAUSED' : 'IN_PLAY';
+  return 'SCHEDULED';
+}
+
+function minuteFromStatus(status: any): number {
+  const display: string = status?.type?.shortDetail || status?.type?.detail || status?.displayClock || '';
+  const m = display.match(/(\d+)/);
+  if (m) return parseInt(m[1], 10);
+  return Math.floor((status?.clock ?? 0) / 60);
+}
+
+function crestFromTeam(team: any): string {
+  if (!team) return '';
+  if (typeof team.logo === 'string' && team.logo) return team.logo;
+  const logos = team.logos;
+  if (Array.isArray(logos) && logos.length) {
+    return typeof logos[0] === 'string' ? logos[0] : logos[0]?.href ?? '';
+  }
+  return '';
+}
+
+// ─── Exported types (same shape used across the app) ────────────────────────
 
 export interface LiveMatch {
   id: number;
@@ -107,29 +137,29 @@ export interface ApiTeam {
   squad?: ApiPlayer[];
 }
 
-// ─── Competition map (keys = ESPN league codes) ───────────────────────────────
+// ─── Competition map (keys = league slugs used by the API) ──────────────────
 
 export const competitionMap: Record<string, { name: string; flag: string }> = {
-  'eng.1':               { name: 'لیگ برتر انگلیس',    flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
-  'esp.1':               { name: 'لالیگا',              flag: '🇪🇸' },
-  'ger.1':               { name: 'بوندسلیگا',          flag: '🇩🇪' },
-  'ita.1':               { name: 'سری آ',              flag: '🇮🇹' },
-  'fra.1':               { name: 'لیگ ۱ فرانسه',      flag: '🇫🇷' },
-  'uefa.champions_league': { name: 'لیگ قهرمانان اروپا', flag: '🇪🇺' },
-  'uefa.europa':         { name: 'لیگ اروپا',          flag: '🇪🇺' },
-  'ned.1':               { name: 'اردیویزیه',          flag: '🇳🇱' },
-  'por.1':               { name: 'لیگ برتر پرتغال',    flag: '🇵🇹' },
-  'bra.1':               { name: 'سری آ برزیل',        flag: '🇧🇷' },
+  'eng.1':          { name: 'لیگ برتر انگلیس',    flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
+  'esp.1':          { name: 'لالیگا',              flag: '🇪🇸' },
+  'ger.1':          { name: 'بوندسلیگا',          flag: '🇩🇪' },
+  'ita.1':          { name: 'سری آ',              flag: '🇮🇹' },
+  'fra.1':          { name: 'لیگ ۱ فرانسه',      flag: '🇫🇷' },
+  'uefa.champions': { name: 'لیگ قهرمانان اروپا', flag: '🇪🇺' },
+  'uefa.europa':    { name: 'لیگ اروپا',          flag: '🇪🇺' },
+  'ned.1':          { name: 'اردیویزیه',          flag: '🇳🇱' },
+  'por.1':          { name: 'لیگ برتر پرتغال',    flag: '🇵🇹' },
+  'bra.1':          { name: 'سری آ برزیل',        flag: '🇧🇷' },
 };
 
-// Internal league IDs → ESPN codes
+// Internal league IDs → API league slugs
 export const leagueIdToCompetition: Record<string, string> = {
   epl:         'eng.1',
   laliga:      'esp.1',
   bundesliga:  'ger.1',
   seriea:      'ita.1',
   ligue1:      'fra.1',
-  ucl:         'uefa.champions_league',
+  ucl:         'uefa.champions',
   uel:         'uefa.europa',
   eredivisie:  'ned.1',
   primeiraliga:'por.1',
@@ -206,30 +236,26 @@ function eventsToMatches(events: any[], code: string): LiveMatch[] {
     const comp = e.competitions?.[0];
     const home = comp?.competitors?.find((c: any) => c.homeAway === 'home');
     const away = comp?.competitors?.find((c: any) => c.homeAway === 'away');
-    const sName = e.status?.type?.name ?? 'STATUS_SCHEDULED';
-    let minute: number | undefined;
-    if (sName === 'STATUS_IN_PROGRESS') {
-      const elapsed = Math.floor(e.status?.clock ?? 0);
-      minute = (e.status?.period ?? 1) >= 2 ? 45 + elapsed : elapsed;
-    } else if (sName === 'STATUS_HALFTIME') {
-      minute = 45;
-    }
+    const statusType = comp?.status?.type ?? e.status?.type ?? {};
+    const state = statusType.state ?? 'unknown';
+    const name = statusType.name ?? '';
+    const minute: number | undefined = state === 'in' ? minuteFromStatus(comp?.status) : undefined;
     return {
       id: parseInt(e.id, 10),
       utcDate: e.date ?? '',
-      status: mapStatus(sName),
+      status: mapStatus(state, name),
       minute,
       homeTeam: {
-        id: parseInt(home?.team?.id ?? '0', 10),
-        name: home?.team?.displayName ?? '',
+        id: parseInt(home?.team?.id ?? home?.id ?? '0', 10),
+        name: home?.team?.displayName ?? home?.team?.name ?? '',
         shortName: home?.team?.abbreviation ?? '',
-        crest: home?.team?.logo ?? '',
+        crest: crestFromTeam(home?.team),
       },
       awayTeam: {
-        id: parseInt(away?.team?.id ?? '0', 10),
-        name: away?.team?.displayName ?? '',
+        id: parseInt(away?.team?.id ?? away?.id ?? '0', 10),
+        name: away?.team?.displayName ?? away?.team?.name ?? '',
         shortName: away?.team?.abbreviation ?? '',
-        crest: away?.team?.logo ?? '',
+        crest: crestFromTeam(away?.team),
       },
       score: {
         fullTime: {
@@ -248,6 +274,10 @@ function eventsToMatches(events: any[], code: string): LiveMatch[] {
   });
 }
 
+function isCompletedEvent(e: any): boolean {
+  return Boolean(e.competitions?.[0]?.status?.type?.completed ?? e.status?.type?.completed);
+}
+
 function dedupe(matches: LiveMatch[]): LiveMatch[] {
   const seen = new Set<number>();
   return matches.filter(m => {
@@ -260,42 +290,43 @@ function dedupe(matches: LiveMatch[]): LiveMatch[] {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function getLiveMatches(): Promise<LiveMatch[] | null> {
-  const tomorrow = toEspnDate(new Date(Date.now() + 86400000));
-  const fetches = ALL_LEAGUES.flatMap(code => [
-    espnGet<any>(`${code}/scoreboard`)
+  const slugs = await getAvailableLeagueSlugs();
+  if (!slugs.length) return null;
+  const tomorrow = toDateKey(new Date(Date.now() + 86400000));
+  const fetches = slugs.flatMap(code => [
+    apiGet<any>(`${code}/scoreboard`)
       .then(d => d?.events ? eventsToMatches(d.events, code) : []),
-    espnGet<any>(`${code}/scoreboard?dates=${tomorrow}`)
+    apiGet<any>(`${code}/scoreboard?dates=${tomorrow}`)
       .then(d => d?.events ? eventsToMatches(d.events, code) : []),
   ]);
   return dedupe((await Promise.all(fetches)).flat());
 }
 
 export async function getRecentMatches(): Promise<LiveMatch[] | null> {
-  const yesterday  = toEspnDate(new Date(Date.now() - 86400000));
-  const twoDaysAgo = toEspnDate(new Date(Date.now() - 2 * 86400000));
-  const fetches = TOP_LEAGUES.flatMap(code => [
-    espnGet<any>(`${code}/scoreboard?dates=${yesterday}`)
-      .then(d => d?.events ? eventsToMatches(d.events.filter((e: any) => e.status?.type?.completed), code) : []),
-    espnGet<any>(`${code}/scoreboard?dates=${twoDaysAgo}`)
-      .then(d => d?.events ? eventsToMatches(d.events.filter((e: any) => e.status?.type?.completed), code) : []),
+  const slugs = await getAvailableLeagueSlugs();
+  if (!slugs.length) return null;
+  const yesterday  = toDateKey(new Date(Date.now() - 86400000));
+  const twoDaysAgo = toDateKey(new Date(Date.now() - 2 * 86400000));
+  const fetches = slugs.flatMap(code => [
+    apiGet<any>(`${code}/scoreboard?dates=${yesterday}`)
+      .then(d => d?.events ? eventsToMatches(d.events.filter(isCompletedEvent), code) : []),
+    apiGet<any>(`${code}/scoreboard?dates=${twoDaysAgo}`)
+      .then(d => d?.events ? eventsToMatches(d.events.filter(isCompletedEvent), code) : []),
   ]);
   return dedupe((await Promise.all(fetches)).flat());
 }
 
 export async function getCompetitionMatches(code: string): Promise<LiveMatch[] | null> {
-  const d = await espnGet<any>(`${code}/scoreboard`);
+  const d = await apiGet<any>(`${code}/scoreboard`);
   if (!d?.events) return null;
   return eventsToMatches(d.events, code);
 }
 
 export async function getStandings(code: string): Promise<Standing[] | null> {
-  const d = await espnGet<any>(`${code}/standings`);
+  const d = await apiGet<any>(`${code}/standings`);
   if (!d) return null;
 
-  let entries: any[] = d.standings?.entries ?? [];
-  if (!entries.length && d.children?.length) {
-    entries = d.children.flatMap((c: any) => c.standings?.entries ?? []);
-  }
+  const entries: any[] = (d.children ?? []).flatMap((c: any) => c.standings?.entries ?? []);
   if (!entries.length) return null;
 
   return entries.map((entry: any, idx: number) => {
@@ -303,19 +334,20 @@ export async function getStandings(code: string): Promise<Standing[] | null> {
     const get = (...names: string[]): number => {
       for (const n of names) {
         const s = stats.find((s: any) => s.name === n || s.abbreviation === n);
-        if (s?.value !== undefined) {
-          return typeof s.value === 'number' ? Math.round(s.value) : parseInt(s.value, 10) || 0;
+        if (s?.displayValue != null) {
+          const num = Number(s.displayValue);
+          return Number.isFinite(num) ? Math.round(num) : 0;
         }
       }
       return 0;
     };
     return {
-      position: idx + 1,
+      position: entry.rank ?? idx + 1,
       team: {
         id: parseInt(entry.team?.id ?? '0', 10),
-        name: entry.team?.displayName ?? '',
+        name: entry.team?.displayName ?? entry.team?.name ?? '',
         shortName: entry.team?.abbreviation ?? '',
-        crest: entry.team?.logos?.[0]?.href ?? '',
+        crest: crestFromTeam(entry.team),
       },
       playedGames: get('gamesPlayed', 'GP'),
       won:         get('wins', 'W'),
@@ -328,101 +360,106 @@ export async function getStandings(code: string): Promise<Standing[] | null> {
   });
 }
 
-export async function getTopScorers(code: string): Promise<{ player: ApiPlayer; team: ApiTeam; goals: number; assists: number }[] | null> {
-  const d = await espnGet<any>(`${code}/leaders`);
-  if (!d) return null;
-  const goalCat = (d.leaders ?? []).find((l: any) =>
-    (l.name ?? '').toLowerCase().includes('goal') ||
-    (l.displayName ?? '').toLowerCase().includes('goal')
-  );
-  if (!goalCat?.leaders?.length) return null;
-  return goalCat.leaders.slice(0, 10).map((l: any) => ({
-    player: {
-      id: parseInt(l.athlete?.id ?? '0', 10),
-      name: l.athlete?.displayName ?? '',
-      position: l.athlete?.position?.abbreviation ?? '',
-      nationality: '',
-      dateOfBirth: '',
-    },
-    team: {
-      id: parseInt(l.team?.id ?? '0', 10),
-      name: l.team?.displayName ?? '',
-      shortName: l.team?.abbreviation ?? '',
-      crest: l.team?.logos?.[0]?.href ?? '',
-    },
-    goals: l.value ?? 0,
-    assists: 0,
-  }));
+// League-wide top scorers are not published by this API yet (no validated,
+// structured collection for them on the server side) — the caller falls back
+// to a static list when this returns null.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function getTopScorers(_code: string): Promise<{ player: ApiPlayer; team: ApiTeam; goals: number; assists: number }[] | null> {
+  return null;
 }
 
-// Match detail — leagueCode is the ESPN code (e.g. 'eng.1')
+function parseMinuteFromPlay(p: any): number {
+  const disp: string = p.clock?.displayValue || '';
+  const m = disp.match(/(\d+)/);
+  if (m) return parseInt(m[1], 10);
+  const period = p.period?.number ?? 1;
+  const secs = p.clock?.value ?? 0;
+  return period >= 2 ? 45 + Math.floor(secs / 60) : Math.floor(secs / 60);
+}
+
+function athleteRef(a: any): { id: number; name: string } | null {
+  if (!a) return null;
+  const athlete = a.athlete ?? a;
+  const id = parseInt(athlete?.id ?? '0', 10);
+  const name = athlete?.displayName ?? athlete?.name ?? '';
+  if (!name) return null;
+  return { id, name };
+}
+
+// Match detail — leagueCode is the league slug (e.g. 'eng.1')
 export async function getMatch(id: number, leagueCode?: string): Promise<LiveMatchDetail | null> {
-  const codes = leagueCode ? [leagueCode, ...ALL_LEAGUES.filter(c => c !== leagueCode)] : ALL_LEAGUES;
+  const codes = leagueCode ? [leagueCode] : await getAvailableLeagueSlugs();
   for (const code of codes) {
     try {
-      const r = await fetch(`${ESPN}/${code}/summary?event=${id}`);
-      if (!r.ok) continue;
-      const d = await r.json();
-      const comp = d.header?.competitions?.[0];
+      const summary = await apiGet<any>(`${code}/summary?event=${id}`);
+      const comp = summary?.header?.competitions?.[0];
       if (!comp) continue;
 
       const home = comp.competitors?.find((c: any) => c.homeAway === 'home');
       const away = comp.competitors?.find((c: any) => c.homeAway === 'away');
       if (!home || !away) continue;
 
-      const sName = comp.status?.type?.name ?? 'STATUS_SCHEDULED';
+      const statusType = comp.status?.type ?? {};
+      const state = statusType.state ?? 'unknown';
+      const name = statusType.name ?? '';
 
-      const htHome = home.linescores?.[0]?.value ?? null;
-      const htAway = away.linescores?.[0]?.value ?? null;
+      const plays = await apiGet<any>(`${code}/events/${id}/plays?important=true&limit=300`);
+      const items: any[] = plays?.items ?? [];
 
-      const goals: MatchGoal[] = (d.plays ?? [])
-        .filter((p: any) => p.scoringPlay)
-        .map((p: any) => {
-          // Parse minute from play text e.g. "Goal by Player (45')"
-          const mMatch = (p.text ?? '').match(/\((\d+)'/);
-          const period = p.period?.number ?? 1;
-          const minute = mMatch
-            ? parseInt(mMatch[1], 10)
-            : period >= 2
-              ? 45 + Math.floor((p.clock?.value ?? 0) / 60)
-              : Math.floor((p.clock?.value ?? 0) / 60);
+      const goals: MatchGoal[] = items
+        .filter(p => p.scoringPlay)
+        .map(p => ({
+          minute: parseMinuteFromPlay(p),
+          type: p.penaltyKick ? 'PENALTY' : p.ownGoal ? 'OWN_GOAL' : 'NORMAL',
+          team: { id: parseInt(p.team?.id ?? '0', 10), name: p.team?.displayName ?? p.team?.name ?? '' },
+          scorer: athleteRef(p.athletesInvolved?.[0]),
+          assist: athleteRef(p.athletesInvolved?.[1]),
+        }));
+
+      const bookings: MatchBooking[] = items
+        .filter(p => p.yellowCard || p.redCard)
+        .map(p => ({
+          minute: parseMinuteFromPlay(p),
+          team: { id: parseInt(p.team?.id ?? '0', 10), name: p.team?.displayName ?? p.team?.name ?? '' },
+          player: athleteRef(p.athletesInvolved?.[0]),
+          card: p.redCard ? 'RED' : 'YELLOW',
+        }));
+
+      const substitutions: MatchSubstitution[] = items
+        .filter(p => p.substitution || p.type?.type === 'substitution')
+        .map(p => {
+          const participants = p.participants?.length ? p.participants : p.athletesInvolved ?? [];
           return {
-            minute,
-            type: 'NORMAL',
-            team: { id: parseInt(p.team?.id ?? '0', 10), name: p.team?.displayName ?? '' },
-            scorer: p.participants?.[0]?.athlete
-              ? { id: parseInt(p.participants[0].athlete.id, 10), name: p.participants[0].athlete.displayName }
-              : null,
-            assist: null,
+            minute: parseMinuteFromPlay(p),
+            team: { id: parseInt(p.team?.id ?? '0', 10), name: p.team?.displayName ?? p.team?.name ?? '' },
+            playerIn: athleteRef(participants[0]),
+            playerOut: athleteRef(participants[1]),
           };
         });
 
       return {
         id,
         utcDate: comp.date ?? '',
-        status: mapStatus(sName),
-        minute: sName === 'STATUS_IN_PROGRESS' ? Math.floor(comp.status?.clock ?? 0) : undefined,
+        status: mapStatus(state, name),
+        minute: state === 'in' ? minuteFromStatus(comp.status) : undefined,
         homeTeam: {
-          id: parseInt(home.id, 10),
-          name: home.team?.displayName ?? '',
+          id: parseInt(home.team?.id ?? home.id ?? '0', 10),
+          name: home.team?.displayName ?? home.team?.name ?? '',
           shortName: home.team?.abbreviation ?? '',
-          crest: home.team?.logos?.[0]?.href ?? '',
+          crest: crestFromTeam(home.team),
         },
         awayTeam: {
-          id: parseInt(away.id, 10),
-          name: away.team?.displayName ?? '',
+          id: parseInt(away.team?.id ?? away.id ?? '0', 10),
+          name: away.team?.displayName ?? away.team?.name ?? '',
           shortName: away.team?.abbreviation ?? '',
-          crest: away.team?.logos?.[0]?.href ?? '',
+          crest: crestFromTeam(away.team),
         },
         score: {
           fullTime: {
             home: home.score != null ? parseInt(home.score, 10) : null,
             away: away.score != null ? parseInt(away.score, 10) : null,
           },
-          halfTime: {
-            home: htHome !== null ? Math.round(htHome) : null,
-            away: htAway !== null ? Math.round(htAway) : null,
-          },
+          halfTime: { home: null, away: null },
         },
         competition: {
           id: 0,
@@ -431,9 +468,13 @@ export async function getMatch(id: number, leagueCode?: string): Promise<LiveMat
           code,
         },
         goals,
-        bookings: [],
-        substitutions: [],
-        referees: [],
+        bookings,
+        substitutions,
+        referees: (summary?.gameInfo?.officials ?? []).map((o: any) => ({
+          id: 0,
+          name: o.displayName ?? o.name ?? o.fullName ?? '',
+          nationality: o.nationality ?? '',
+        })),
       };
     } catch {
       // try next league
