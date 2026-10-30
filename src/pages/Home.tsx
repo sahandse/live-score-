@@ -1,100 +1,133 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Flame, Clock, CheckCircle, RefreshCw, Search, History, X } from 'lucide-react';
-import { liveMatches as mockMatches, standings as mockStandings } from '../data/matches';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
 import MatchCard from '../components/MatchCard';
-import {
-  getLiveMatches, getRecentMatches, getStandings, getTopScorers,
-  competitionMap, translateStatus,
-  getZoneType, zoneColor,
-  type LiveMatch, type Standing,
-} from '../services/footballApi';
-import type { Match } from '../data/matches';
 import { toPersianTeamName } from '../data/teamNames';
+import {
+  clearFeedCache,
+  getFeedLeagues,
+  getLeagueScorers,
+  getLeagueStandings,
+  getMatchFeed,
+  type FeedMatch,
+  type FeedScorer,
+  type FeedStandingRow,
+  type Provider,
+} from '../services/dataApi';
+import type { Match } from '../data/matches';
 
 type Tab = 'live' | 'upcoming' | 'finished' | 'recent';
 
-function apiMatchToLocal(m: LiveMatch): Match {
-  const { type } = translateStatus(m.status);
-  const comp = competitionMap[m.competition.code] ?? { name: m.competition.name, flag: '🌍' };
+const IRAN_LEAGUE_ID = '6';
+
+function toLocalMatch(feed: FeedMatch, provider: Provider): Match {
+  const faName = (name: string) => (provider === 'espn' ? toPersianTeamName(name, name) : name);
   return {
-    id: String(m.id),
-    homeTeam: m.homeTeam.name,
-    homeTeamPersian: toPersianTeamName(m.homeTeam.shortName, m.homeTeam.name),
+    id: feed.id,
+    homeTeam: feed.home.name,
+    homeTeamPersian: faName(feed.home.name),
     homeTeamFlag: '',
-    homeCrest: m.homeTeam.crest,
-    awayTeam: m.awayTeam.name,
-    awayTeamPersian: toPersianTeamName(m.awayTeam.shortName, m.awayTeam.name),
+    homeCrest: feed.home.logo,
+    awayTeam: feed.away.name,
+    awayTeamPersian: faName(feed.away.name),
     awayTeamFlag: '',
-    awayCrest: m.awayTeam.crest,
-    homeScore: m.score.fullTime.home ?? m.score.halfTime.home ?? 0,
-    awayScore: m.score.fullTime.away ?? m.score.halfTime.away ?? 0,
-    status: type,
-    leagueId: m.competition.code,
-    leagueName: comp.name,
-    leagueFlag: comp.flag,
-    date: new Date(m.utcDate).toLocaleDateString('fa-IR'),
-    time: new Date(m.utcDate).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' }),
-    events: [],
+    awayCrest: feed.away.logo,
+    homeScore: feed.homeScore,
+    awayScore: feed.awayScore,
+    status: feed.status,
+    statusText: feed.statusText,
+    minute: feed.minute,
+    leagueId: feed.leagueId,
+    leagueName: feed.leagueName,
+    leagueFlag: '',
+    leagueLogo: feed.leagueLogo,
+    date: feed.persianDate,
+    time: feed.time,
+    dayOffset: feed.dayOffset,
   };
 }
+
+const isFinishedLike = (status: Match['status']) =>
+  status === 'finished' || status === 'cancelled' || status === 'postponed';
 
 export default function Home() {
   const { darkMode } = useApp();
   const [tab, setTab] = useState<Tab>('live');
   const [searchQuery, setSearchQuery] = useState('');
   const [leagueFilter, setLeagueFilter] = useState<string | null>(null);
-  const [apiMatches, setApiMatches] = useState<Match[] | null>(null);
-  const [recentApiMatches, setRecentApiMatches] = useState<Match[] | null>(null);
-  const [apiStandings, setApiStandings] = useState<Standing[] | null>(null);
-  const [apiScorers, setApiScorers] = useState<{ player: { name: string }; team: { crest: string; shortName: string }; goals: number; assists: number }[] | null>(null);
+  const [localMatches, setLocalMatches] = useState<Match[] | null>(null);
+  const [provider, setProvider] = useState<Provider>('none');
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [leagueOrder, setLeagueOrder] = useState<Record<string, number>>({});
+  const [standingsLeague, setStandingsLeague] = useState<{ id: string; name: string; logo: string } | null>(null);
+  const [apiStandings, setApiStandings] = useState<FeedStandingRow[] | null>(null);
+  const [apiScorers, setApiScorers] = useState<FeedScorer[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    const [matches, recent, standings, scorers] = await Promise.all([
-      getLiveMatches(),
-      getRecentMatches(),
-      getStandings('eng.1'),
-      getTopScorers('eng.1'),
-    ]);
-    if (matches !== null) {
-      setApiMatches(matches.map(apiMatchToLocal));
-      setLastUpdated(new Date());
+  const loadData = useCallback(async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    if (refresh) clearFeedCache();
+
+    const [feed, leagues] = await Promise.all([getMatchFeed({ refresh }), getFeedLeagues()]);
+    const order: Record<string, number> = {};
+    leagues.forEach((league) => { order[league.id] = league.priority; });
+    setLeagueOrder(order);
+    setProvider(feed.provider);
+    setGeneratedAt(feed.generatedAt);
+
+    const primary =
+      leagues.find((league) => league.id === IRAN_LEAGUE_ID && league.hasData) ??
+      leagues.find((league) => league.hasData) ??
+      leagues[0];
+    if (primary) {
+      setStandingsLeague({ id: primary.id, name: primary.name, logo: primary.logo });
+      const [rows, scorers] = await Promise.all([getLeagueStandings(primary.id), getLeagueScorers(primary.id)]);
+      setApiStandings(rows.slice(0, 10));
+      setApiScorers(scorers.slice(0, 8));
     }
-    if (recent !== null) {
-      setRecentApiMatches(recent.map(apiMatchToLocal));
+
+    if (feed.matches.length) {
+      setLocalMatches(feed.matches.map((match) => toLocalMatch(match, feed.provider)));
     }
-    if (standings) setApiStandings(standings.slice(0, 10));
-    if (scorers) setApiScorers(scorers);
-    setLoading(false);
+    if (refresh) setRefreshing(false);
+    else setLoading(false);
   }, []);
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 60000);
+    const interval = setInterval(() => loadData(), 60_000);
     return () => clearInterval(interval);
   }, [loadData]);
 
-  const matches = apiMatches ?? mockMatches;
-  const recentMatches = recentApiMatches ?? mockMatches.filter(m => m.status === 'finished');
+  const matches = useMemo(() => {
+    const source = localMatches ?? [];
+    return [...source].sort((a, b) => {
+      const rank = (a.leagueId in leagueOrder ? leagueOrder[a.leagueId] : 20) - (b.leagueId in leagueOrder ? leagueOrder[b.leagueId] : 20);
+      if (rank !== 0) return rank;
+      return a.leagueName.localeCompare(b.leagueName, 'fa') || a.time.localeCompare(b.time);
+    });
+  }, [localMatches, leagueOrder]);
+
+  const recentMatches = useMemo(
+    () => matches.filter((m) => isFinishedLike(m.status) && (m.dayOffset ?? 0) < 0),
+    [matches]
+  );
 
   const allMatches = tab === 'recent' ? recentMatches : matches;
 
-  // Derive unique leagues from all visible matches for filter chips
   const leagueChips = [
     ...new Map(
-      [...matches, ...recentMatches].map(m => [m.leagueId, { id: m.leagueId, name: m.leagueName, flag: m.leagueFlag }])
+      matches.map(m => [m.leagueId, { id: m.leagueId, name: m.leagueName, logo: m.leagueLogo }])
     ).values()
   ].slice(0, 8);
 
   const filtered = allMatches.filter(m => {
     if (tab === 'live') return m.status === 'live' || m.status === 'halftime';
     if (tab === 'upcoming') return m.status === 'upcoming';
-    if (tab === 'finished') return m.status === 'finished';
-    if (tab === 'recent') return m.status === 'finished';
+    if (tab === 'finished') return isFinishedLike(m.status);
     return true;
   }).filter(m => {
     if (leagueFilter && m.leagueId !== leagueFilter) return false;
@@ -112,19 +145,9 @@ export default function Home() {
   const counts = {
     live: matches.filter(m => m.status === 'live' || m.status === 'halftime').length,
     upcoming: matches.filter(m => m.status === 'upcoming').length,
-    finished: matches.filter(m => m.status === 'finished').length,
+    finished: matches.filter(m => isFinishedLike(m.status)).length,
     recent: recentMatches.length,
   };
-
-  const standings = apiStandings ?? mockStandings;
-
-  const scorers = apiScorers ?? [
-    { player: { name: 'هری کین' }, team: { crest: '', shortName: 'بایرن' }, goals: 36, assists: 8 },
-    { player: { name: 'کیلیان امباپه' }, team: { crest: '', shortName: 'رئال' }, goals: 32, assists: 10 },
-    { player: { name: 'محمد صلاح' }, team: { crest: '', shortName: 'لیورپول' }, goals: 29, assists: 17 },
-    { player: { name: 'لامین یامال' }, team: { crest: '', shortName: 'بارسا' }, goals: 25, assists: 20 },
-    { player: { name: 'ویکتور اوسیمن' }, team: { crest: '', shortName: 'گالاتاسارای' }, goals: 24, assists: 5 },
-  ];
 
   const tabs = [
     { key: 'live' as Tab, label: 'زنده', icon: Flame, count: counts.live },
@@ -133,40 +156,44 @@ export default function Home() {
     { key: 'recent' as Tab, label: 'اخیر', icon: History, count: counts.recent },
   ];
 
+  const sourceLabel =
+    provider === 'varzesh3' ? 'ورزش ۳' : provider === 'espn' ? 'ESPN (پشتیبان)' : 'بدون داده';
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6">
 
-      {/* API status bar */}
+      {/* Data source bar */}
       <div className={`flex items-center justify-between px-4 py-2.5 rounded-2xl mb-4 ${
-        apiMatches
+        provider === 'varzesh3'
           ? darkMode ? 'bg-emerald-950/60 border border-emerald-900' : 'bg-emerald-50 border border-emerald-200'
-          : darkMode ? 'bg-gray-900 border border-gray-800' : 'bg-gray-50 border border-gray-200'
+          : provider === 'espn'
+            ? darkMode ? 'bg-amber-950/50 border border-amber-900' : 'bg-amber-50 border border-amber-200'
+            : darkMode ? 'bg-gray-900 border border-gray-800' : 'bg-gray-50 border border-gray-200'
       }`}>
-        <div className="flex items-center gap-2">
-          {apiMatches ? (
-            <>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 live-pulse" />
-              <span className={`text-xs font-medium ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>دیتای زنده واقعی</span>
-              {lastUpdated && (
-                <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                  · آخرین بروزرسانی: {lastUpdated.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                </span>
-              )}
-            </>
-          ) : (
-            <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-              {loading ? 'در حال اتصال به سرور...' : '⚠️ نمایش دیتای نمونه — بررسی اتصال'}
-            </span>
-          )}
+        <div className="flex items-center gap-2 min-w-0">
+          {provider !== 'none' && <span className="w-2 h-2 rounded-full bg-emerald-500 live-pulse flex-shrink-0" />}
+          <span className={`text-xs font-medium truncate ${
+            provider === 'varzesh3'
+              ? darkMode ? 'text-emerald-400' : 'text-emerald-600'
+              : darkMode ? 'text-amber-400' : 'text-amber-600'
+          }`}>
+            داده {sourceLabel}
+          </span>
+          <span className={`text-xs truncate ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+            · {toPersian(matches.length)} بازی · آخرین بروزرسانی:{' '}
+            {generatedAt
+              ? new Date(generatedAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' })
+              : new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
+          </span>
         </div>
         <button
-          onClick={loadData}
-          disabled={loading}
-          className={`p-1.5 rounded-lg transition-colors ${
-            apiMatches
+          onClick={() => loadData(true)}
+          disabled={loading || refreshing}
+          className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
+            provider === 'varzesh3'
               ? darkMode ? 'hover:bg-emerald-900/50 text-emerald-500' : 'hover:bg-emerald-100 text-emerald-600'
               : darkMode ? 'text-gray-600 hover:text-gray-400' : 'text-gray-400 hover:text-gray-600'
-          } ${loading ? 'animate-spin' : ''}`}
+          } ${loading || refreshing ? 'animate-spin' : ''}`}
           title="بروزرسانی"
         >
           <RefreshCw size={13} />
@@ -179,7 +206,7 @@ export default function Home() {
           { label: 'زنده', value: counts.live, color: 'from-red-600 to-orange-500', icon: '🔴' },
           { label: 'کل', value: matches.length, color: 'from-emerald-600 to-teal-500', icon: '⚽' },
           { label: 'آینده', value: counts.upcoming, color: 'from-blue-600 to-indigo-500', icon: '🔔' },
-          { label: 'نتایج اخیر', value: counts.recent, color: 'from-purple-600 to-pink-500', icon: '📋' },
+          { label: 'نتایج اخیر', value: counts.finished, color: 'from-purple-600 to-pink-500', icon: '📋' },
         ].map((stat, i) => (
           <div key={i} className={`rounded-2xl bg-gradient-to-br ${stat.color} p-3 text-white`}>
             <div className="text-xl mb-0.5">{stat.icon}</div>
@@ -233,8 +260,11 @@ export default function Home() {
                   : darkMode ? 'bg-gray-800 text-gray-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              <span>{l.flag}</span>
-              <span className="max-w-[80px] truncate">{l.name.split(' ').slice(0, 2).join(' ')}</span>
+              {l.logo
+                ? <img src={l.logo} alt="" className="w-4 h-4 object-contain" />
+                : <span>⚽</span>
+              }
+              <span className="max-w-[90px] truncate">{l.name}</span>
             </button>
           ))}
         </div>
@@ -270,7 +300,7 @@ export default function Home() {
       <div className="grid md:grid-cols-2 gap-6">
         {/* Matches column */}
         <div className="space-y-3">
-          {loading && !apiMatches ? (
+          {loading && !localMatches ? (
             Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className={`h-28 rounded-2xl animate-pulse ${darkMode ? 'bg-gray-800' : 'bg-gray-200'}`} />
             ))
@@ -279,7 +309,13 @@ export default function Home() {
               <div className="text-4xl mb-3">
                 {searchQuery ? '🔍' : '⚽'}
               </div>
-              <p>{searchQuery ? `نتیجه‌ای برای «${searchQuery}» یافت نشد` : 'بازی‌ای در این بخش وجود ندارد'}</p>
+              <p>
+                {searchQuery
+                  ? `نتیجه‌ای برای «${searchQuery}» یافت نشد`
+                  : provider === 'none'
+                    ? 'هنوز داده‌ای همگام‌سازی نشده است'
+                    : 'بازی‌ای در این بخش وجود ندارد'}
+              </p>
             </div>
           ) : (
             filtered.map(match => <MatchCard key={match.id} match={match} />)
@@ -291,96 +327,102 @@ export default function Home() {
           {/* Standings */}
           <div className={`rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
             <div className={`flex items-center justify-between px-5 py-4 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
-              <div className="flex items-center gap-2">
-                <span>🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
-                <h3 className={`font-bold text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>جدول لیگ برتر انگلیس</h3>
+              <div className="flex items-center gap-2 min-w-0">
+                {standingsLeague?.logo
+                  ? <img src={standingsLeague.logo} alt="" className="w-5 h-5 object-contain" />
+                  : <span>🏆</span>
+                }
+                <h3 className={`font-bold text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                  جدول {standingsLeague?.name ?? 'لیگ'}
+                </h3>
               </div>
-              {apiStandings && <span className="text-xs text-emerald-400 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 live-pulse" />زنده</span>}
+              {provider === 'varzesh3' && (
+                <span className="text-xs text-emerald-400 flex items-center gap-1 flex-shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 live-pulse" />زنده
+                </span>
+              )}
             </div>
-            <table className="w-full text-xs">
-              <thead>
-                <tr className={darkMode ? 'text-gray-600' : 'text-gray-400'}>
-                  <th className="px-3 py-2 text-right">#</th>
-                  <th className="px-3 py-2 text-right">تیم</th>
-                  <th className="px-2 py-2 text-center">ب</th>
-                  <th className="px-2 py-2 text-center text-emerald-500">B</th>
-                  <th className="px-2 py-2 text-center">M</th>
-                  <th className="px-2 py-2 text-center text-red-400">B</th>
-                  <th className="px-2 py-2 text-center font-bold">ام</th>
-                </tr>
-              </thead>
-              <tbody>
-                {standings.map((row, i) => {
-                  const pos = 'position' in row ? (row as Standing).position : i + 1;
-                  const isApiRow = 'team' in row && typeof (row as Standing).team === 'object';
-                  const teamName = isApiRow ? ((row as Standing).team.shortName || (row as Standing).team.name) : (row as typeof mockStandings[0]).team;
-                  const crest = isApiRow ? (row as Standing).team.crest : '';
-                  const flag = !isApiRow ? (row as typeof mockStandings[0]).flag : '';
-                  const played = isApiRow ? (row as Standing).playedGames : (row as typeof mockStandings[0]).played;
-                  const won = (row as { won: number }).won;
-                  const drawn = isApiRow ? (row as Standing).draw : (row as typeof mockStandings[0]).drawn;
-                  const lost = (row as { lost: number }).lost;
-                  const pts = (row as { points: number }).points;
-                  const zone = isApiRow ? getZoneType('PL', pos, standings.length) : null;
-                  const dot = zoneColor(zone);
-
-                  return (
-                    <tr key={i} className={`border-t transition-colors ${darkMode ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-50 hover:bg-gray-50'}`}>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1 justify-end">
-                          <span className={`font-bold ${pos <= 4 ? 'text-emerald-500' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{toPersian(pos)}</span>
-                          {zone && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
-                        </div>
-                      </td>
-                      <td className={`px-3 py-2.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                        <div className="flex items-center gap-1.5">
-                          {crest ? <img src={crest} alt="" className="w-4 h-4 object-contain" /> : <span>{flag}</span>}
-                          <span className="font-medium truncate max-w-[80px]">{teamName}</span>
-                        </div>
-                      </td>
-                      <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{toPersian(played)}</td>
-                      <td className="px-2 py-2.5 text-center text-emerald-500 font-medium">{toPersian(won)}</td>
-                      <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{toPersian(drawn)}</td>
-                      <td className="px-2 py-2.5 text-center text-red-400 font-medium">{toPersian(lost)}</td>
-                      <td className={`px-2 py-2.5 text-center font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{toPersian(pts)}</td>
+            {!apiStandings || apiStandings.length === 0 ? (
+              <p className={`text-center py-6 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>جدول در دسترس نیست</p>
+            ) : (
+              <>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className={darkMode ? 'text-gray-600' : 'text-gray-400'}>
+                      <th className="px-3 py-2 text-right">#</th>
+                      <th className="px-3 py-2 text-right">تیم</th>
+                      <th className="px-2 py-2 text-center">ب</th>
+                      <th className="px-2 py-2 text-center text-emerald-500">B</th>
+                      <th className="px-2 py-2 text-center">M</th>
+                      <th className="px-2 py-2 text-center text-red-400">B</th>
+                      <th className="px-2 py-2 text-center font-bold">ام</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <div className={`px-4 py-2.5 flex flex-wrap gap-3 text-xs border-t ${darkMode ? 'border-gray-800 text-gray-600' : 'border-gray-100 text-gray-400'}`}>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />لیگ قهرمانان</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-orange-500" />لیگ اروپا</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />سقوط</span>
-            </div>
+                  </thead>
+                  <tbody>
+                    {apiStandings.map((row) => (
+                      <tr key={row.teamId} className={`border-t transition-colors ${darkMode ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-50 hover:bg-gray-50'}`}>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-1 justify-end">
+                            <span className={`font-bold ${row.rank <= 4 ? 'text-emerald-500' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{toPersian(row.rank)}</span>
+                            {row.qualificationColor && (
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: row.qualificationColor }} />
+                            )}
+                          </div>
+                        </td>
+                        <td className={`px-3 py-2.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          <div className="flex items-center gap-1.5">
+                            {row.teamLogo && <img src={row.teamLogo} alt="" className="w-4 h-4 object-contain" />}
+                            <span className="font-medium truncate max-w-[90px]">{row.teamName}</span>
+                          </div>
+                        </td>
+                        <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{toPersian(row.played)}</td>
+                        <td className="px-2 py-2.5 text-center text-emerald-500 font-medium">{toPersian(row.won)}</td>
+                        <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{toPersian(row.drawn)}</td>
+                        <td className="px-2 py-2.5 text-center text-red-400 font-medium">{toPersian(row.lost)}</td>
+                        <td className={`px-2 py-2.5 text-center font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{toPersian(row.points)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className={`px-4 py-2.5 flex flex-wrap gap-3 text-xs border-t ${darkMode ? 'border-gray-800 text-gray-600' : 'border-gray-100 text-gray-400'}`}>
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />سهمیه قاره‌ای</span>
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />سقوط</span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Top Scorers */}
           <div className={`rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
             <div className={`flex items-center gap-2 px-5 py-4 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
               <span>⚽</span>
-              <h3 className={`font-bold text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>گلزنان برتر — لیگ برتر</h3>
-              {apiScorers && <span className="text-xs text-emerald-400 mr-auto flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 live-pulse" />زنده</span>}
+              <h3 className={`font-bold text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                گلزنان برتر — {standingsLeague?.name ?? 'لیگ'}
+              </h3>
             </div>
-            {scorers.map((s, i) => (
-              <div key={i} className={`flex items-center gap-3 px-4 py-2.5 ${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'} transition-colors`}>
-                <span className={`text-sm font-black w-6 text-center tabular-nums ${
-                  i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-amber-600' : darkMode ? 'text-gray-700' : 'text-gray-300'
-                }`}>{toPersian(i + 1)}</span>
-                {s.team.crest
-                  ? <img src={s.team.crest} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
-                  : <span className="text-xl">⚽</span>
-                }
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs font-semibold truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{s.player.name}</p>
-                  <p className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{s.team.shortName}</p>
+            {!apiScorers || apiScorers.length === 0 ? (
+              <p className={`text-center py-6 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>گلزنان در دسترس نیست</p>
+            ) : (
+              apiScorers.map((s, i) => (
+                <div key={s.playerId} className={`flex items-center gap-3 px-4 py-2.5 ${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'} transition-colors`}>
+                  <span className={`text-sm font-black w-6 text-center tabular-nums ${
+                    i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-amber-600' : darkMode ? 'text-gray-700' : 'text-gray-300'
+                  }`}>{toPersian(i + 1)}</span>
+                  {s.portrait || s.teamLogo
+                    ? <img src={s.portrait || s.teamLogo} alt="" className="w-7 h-7 object-contain flex-shrink-0 rounded-full" />
+                    : <span className="text-xl">⚽</span>
+                  }
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-semibold truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{s.name}</p>
+                    <p className={`text-xs truncate ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{s.teamName}</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <span className="text-emerald-500">{toPersian(s.goals)} ⚽</span>
+                    {s.assists > 0 && <span className={darkMode ? 'text-blue-400' : 'text-blue-500'}>{toPersian(s.assists)} 🎯</span>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs font-bold">
-                  <span className="text-emerald-500">{toPersian(s.goals)} ⚽</span>
-                  {s.assists > 0 && <span className={darkMode ? 'text-blue-400' : 'text-blue-500'}>{toPersian(s.assists)} 🎯</span>}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

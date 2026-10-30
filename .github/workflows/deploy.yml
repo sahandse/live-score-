@@ -4,10 +4,16 @@ on:
   push:
     branches:
       - main
+  schedule:
+    # varzesh3 sends no CORS headers, so the payload is pulled here and published as static JSON.
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: pages-deploy
 
 jobs:
   deploy:
@@ -24,6 +30,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Sync live data from varzesh3
+        env:
+          DATA_MAX_LEAGUES: '16'
+          DATA_MAX_DETAILS: '30'
+        run: node scripts/sync-data.mjs
 
       - name: Build
         run: npm run build

@@ -13,7 +13,7 @@ export default function MatchCard({ match }: Props) {
   const { darkMode, addReminder, removeReminder, hasReminder } = useApp();
   const reminded = hasReminder(match.id);
 
-  // URL format: {espnLeagueCode}~{eventId}  e.g. eng.1~668135042
+  // URL format: {leagueId}~{matchId}, the pair the detail page resolves against the feed.
   const matchUrl = `/match/${match.leagueId ? `${match.leagueId}~${match.id}` : match.id}`;
 
   const handleReminder = () => {
@@ -44,13 +44,25 @@ export default function MatchCard({ match }: Props) {
     if (match.status === 'halftime') {
       return <span className="text-amber-400 text-xs font-bold">نیمه اول</span>;
     }
+    if (match.status === 'postponed' || match.status === 'cancelled') {
+      return (
+        <span className="text-orange-400 text-xs font-bold">{match.statusText || (match.status === 'cancelled' ? 'لغو' : 'تعویق')}</span>
+      );
+    }
     if (match.status === 'finished') {
-      return <span className={`text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>پایان</span>;
+      return (
+        <span className={`text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+          {match.statusText && match.statusText !== 'نتیجه نهایی' ? match.statusText : 'پایان'}
+        </span>
+      );
     }
     return (
       <span className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{match.time}</span>
     );
   };
+
+  const hasScore = match.status !== 'upcoming' && match.homeScore !== null && match.awayScore !== null;
+  const scoreColor = match.status === 'live' ? 'text-white' : darkMode ? 'text-gray-100' : 'text-gray-800';
 
   return (
     <div
@@ -67,9 +79,12 @@ export default function MatchCard({ match }: Props) {
     >
       {/* League row */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm">{match.leagueFlag}</span>
-          <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{match.leagueName}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {match.leagueLogo
+            ? <img src={match.leagueLogo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
+            : <span className="text-sm">{match.leagueFlag}</span>
+          }
+          <span className={`text-xs truncate ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{match.leagueName}</span>
         </div>
         <div className="flex items-center gap-2">
           {statusBadge()}
@@ -107,14 +122,14 @@ export default function MatchCard({ match }: Props) {
             ? 'bg-gradient-to-r from-emerald-600 to-blue-600 shadow-lg'
             : darkMode ? 'bg-gray-800' : 'bg-gray-100'
         }`}>
-          {match.status === 'upcoming' ? (
-            <span className={`text-sm font-bold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>vs</span>
-          ) : (
+          {hasScore ? (
             <>
-              <span className="text-xl font-black text-white tabular-nums">{toPersian(match.homeScore)}</span>
-              <span className="text-white/60 font-light mx-0.5">-</span>
-              <span className="text-xl font-black text-white tabular-nums">{toPersian(match.awayScore)}</span>
+              <span className={`text-xl font-black tabular-nums ${scoreColor}`}>{toPersian(match.homeScore ?? 0)}</span>
+              <span className={`font-light mx-0.5 ${match.status === 'live' ? 'text-white/60' : darkMode ? 'text-gray-600' : 'text-gray-400'}`}>-</span>
+              <span className={`text-xl font-black tabular-nums ${scoreColor}`}>{toPersian(match.awayScore ?? 0)}</span>
             </>
+          ) : (
+            <span className={`text-sm font-bold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>vs</span>
           )}
         </div>
 
@@ -129,25 +144,6 @@ export default function MatchCard({ match }: Props) {
           </span>
         </div>
       </div>
-
-      {/* Match events */}
-      {match.events && match.events.length > 0 && (
-        <div className={`mt-3 pt-3 border-t flex flex-wrap gap-1.5 ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
-          {match.events.slice(-4).map((event, i) => (
-            <div key={i} className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
-              darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
-            }`}>
-              <span>{toPersian(event.minute)}′</span>
-              <span>
-                {event.type === 'goal' ? '⚽' :
-                 event.type === 'yellowcard' ? '🟨' :
-                 event.type === 'redcard' ? '🟥' : '🔄'}
-              </span>
-              <span>{event.playerPersian}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
