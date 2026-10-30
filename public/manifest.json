@@ -1,0 +1,17 @@
+{
+  "name": "لایو اسکور - نتایج زنده فوتبال",
+  "short_name": "لایو اسکور",
+  "description": "نتایج زنده فوتبال ایران و جهان، جدول لیگ‌ها و آمار بازیکنان",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#10b981",
+  "dir": "rtl",
+  "lang": "fa",
+  "categories": ["sports"],
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "screenshots": [],
+  "orientation": "portrait"
+}

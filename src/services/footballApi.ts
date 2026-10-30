@@ -4,6 +4,7 @@ const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 const ALL_LEAGUES = [
   'eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1',
   'uefa.champions_league', 'uefa.europa', 'ned.1', 'por.1',
+  'fifa.worldcup',
 ];
 const TOP_LEAGUES = ['eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1'];
 
@@ -120,6 +121,7 @@ export const competitionMap: Record<string, { name: string; flag: string }> = {
   'ned.1':               { name: 'اردیویزیه',          flag: '🇳🇱' },
   'por.1':               { name: 'لیگ برتر پرتغال',    flag: '🇵🇹' },
   'bra.1':               { name: 'سری آ برزیل',        flag: '🇧🇷' },
+  'fifa.worldcup':       { name: 'جام جهانی ۲۰۲۶',     flag: '🏆' },
 };
 
 // Internal league IDs → ESPN codes

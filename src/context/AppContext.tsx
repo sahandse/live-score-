@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 
+export type AppTab = 'live' | 'groups' | 'schedule' | 'bracket' | 'teams';
+
 interface Reminder {
   id: string;
   matchId: string;
@@ -20,6 +22,10 @@ interface AppContextType {
   addReminder: (reminder: Reminder) => void;
   removeReminder: (matchId: string) => void;
   hasReminder: (matchId: string) => boolean;
+  tab: AppTab;
+  setTab: (t: AppTab) => void;
+  refreshInterval: number;
+  setRefreshInterval: (n: number) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -38,6 +44,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [reminders, setReminders] = useState<Reminder[]>(() => {
     const saved = localStorage.getItem('reminders');
     return saved ? JSON.parse(saved) : [];
+  });
+
+  const [tab, setTab] = useState<AppTab>('live');
+
+  const [refreshInterval, setRefreshIntervalState] = useState<number>(() => {
+    const s = localStorage.getItem('refreshInterval');
+    return s ? Number(s) : 120000;
   });
 
   useEffect(() => {
@@ -77,8 +90,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const hasReminder = (matchId: string) => reminders.some((r: Reminder) => r.matchId === matchId);
 
+  const setRefreshInterval = (n: number) => {
+    localStorage.setItem('refreshInterval', String(n));
+    setRefreshIntervalState(n);
+  };
+
   return (
-    <AppContext.Provider value={{ darkMode, toggleDarkMode, favorites, toggleFavorite, isFavorite, reminders, addReminder, removeReminder, hasReminder }}>
+    <AppContext.Provider value={{
+      darkMode, toggleDarkMode,
+      favorites, toggleFavorite, isFavorite,
+      reminders, addReminder, removeReminder, hasReminder,
+      tab, setTab,
+      refreshInterval, setRefreshInterval,
+    }}>
       {children}
     </AppContext.Provider>
   );
