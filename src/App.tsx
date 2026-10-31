@@ -6,6 +6,7 @@ import BottomNav from './components/BottomNav';
 import Home from './pages/Home';
 import Leagues from './pages/Leagues';
 import Teams from './pages/Teams';
+import TeamDetail from './pages/TeamDetail';
 import Players from './pages/Players';
 import MatchDetail from './pages/MatchDetail';
 
@@ -34,6 +35,7 @@ function AppContent() {
           <Route path="/" element={<Home />} />
           <Route path="/leagues" element={<Leagues />} />
           <Route path="/teams" element={<Teams />} />
+          <Route path="/team/:id" element={<TeamDetail />} />
           <Route path="/players" element={<Players />} />
           <Route path="/match/:id" element={<MatchDetail />} />
           <Route path="*" element={<Home />} />

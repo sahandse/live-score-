@@ -193,17 +193,23 @@ export default function MatchDetail() {
               </div>
             </div>
 
-            <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-6">
-              <div className="flex min-w-0 flex-col items-center gap-3 text-center">
-                <span className="crest-frame h-14 w-14 !rounded-2xl md:h-[72px] md:w-[72px]">
+            <div className="mt-5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:gap-6">
+              <button
+                onClick={() => navigate(`/team/${detail.home.id}`)}
+                className="group flex min-w-0 flex-col items-center gap-3 bg-transparent text-center"
+                aria-label={`صفحهٔ ${detail.home.name}`}
+              >
+                <span className="crest-frame h-14 w-14 !rounded-2xl transition-colors group-hover:!border-[var(--line-strong)] md:h-[72px] md:w-[72px]">
                   {detail.home.logo ? (
                     <img src={detail.home.logo} alt="" className="h-9 w-9 object-contain md:h-11 md:w-11" />
                   ) : (
                     <span className="text-xl">🏟️</span>
                   )}
                 </span>
-                <span className="display t-ink max-w-full truncate text-lg md:text-[22px]">{detail.home.name}</span>
-              </div>
+                <span className="display t-ink max-w-full truncate text-lg underline-offset-4 group-hover:underline md:text-[22px]">
+                  {detail.home.name}
+                </span>
+              </button>
 
               <div className="flex flex-col items-center gap-2">
                 {hasScore ? (
@@ -225,16 +231,22 @@ export default function MatchDetail() {
                 <span className="text-[10px] t-faint">{detail.persianDate}</span>
               </div>
 
-              <div className="flex min-w-0 flex-col items-center gap-3 text-center">
-                <span className="crest-frame h-14 w-14 !rounded-2xl md:h-[72px] md:w-[72px]">
+              <button
+                onClick={() => navigate(`/team/${detail.away.id}`)}
+                className="group flex min-w-0 flex-col items-center gap-3 bg-transparent text-center"
+                aria-label={`صفحهٔ ${detail.away.name}`}
+              >
+                <span className="crest-frame h-14 w-14 !rounded-2xl transition-colors group-hover:!border-[var(--line-strong)] md:h-[72px] md:w-[72px]">
                   {detail.away.logo ? (
                     <img src={detail.away.logo} alt="" className="h-9 w-9 object-contain md:h-11 md:w-11" />
                   ) : (
                     <span className="text-xl">✈️</span>
                   )}
                 </span>
-                <span className="display t-ink max-w-full truncate text-lg md:text-[22px]">{detail.away.name}</span>
-              </div>
+                <span className="display t-ink max-w-full truncate text-lg underline-offset-4 group-hover:underline md:text-[22px]">
+                  {detail.away.name}
+                </span>
+              </button>
             </div>
 
             {(detail.stadium || detail.referee) && (
@@ -371,7 +383,12 @@ export default function MatchDetail() {
                   <section key={side} className="plate reveal reveal-3 self-start overflow-hidden">
                     <div className="flex items-center gap-2 border-b border-[var(--line)] px-3.5 py-2.5">
                       {team.logo && <img src={team.logo} alt="" className="h-5 w-5 shrink-0 object-contain" />}
-                      <span className="t-ink min-w-0 flex-1 truncate text-[12.5px] font-bold">{team.name}</span>
+                      <button
+                        onClick={() => navigate(`/team/${team.id}`)}
+                        className="t-ink min-w-0 flex-1 truncate bg-transparent text-right text-[12.5px] font-bold hover:underline hover:underline-offset-2"
+                      >
+                        {team.name}
+                      </button>
                       {formation && (
                         <span className={`num rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-black ${accent}`}>
                           {formation}

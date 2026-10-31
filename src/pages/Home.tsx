@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { RefreshCw, Search, X } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChevronDown, RefreshCw, Search, X } from 'lucide-react';
 import { toPersian } from '../hooks/usePersianDate';
 import { useApp } from '../context/AppContext';
 import MatchCard from '../components/MatchCard';
@@ -11,6 +11,7 @@ import {
   getLeagueScorers,
   getLeagueStandings,
   getMatchFeed,
+  type FeedLeague,
   type FeedMatch,
   type FeedScorer,
   type FeedStandingRow,
@@ -21,6 +22,7 @@ import type { Match } from '../data/matches';
 type Tab = 'live' | 'upcoming' | 'finished' | 'recent';
 
 const IRAN_LEAGUE_ID = '6';
+const TABLE_PREVIEW = 10;
 
 function toLocalMatch(feed: FeedMatch, provider: Provider): Match {
   const faName = (name: string) => (provider === 'espn' ? toPersianTeamName(name, name) : name);
@@ -30,10 +32,12 @@ function toLocalMatch(feed: FeedMatch, provider: Provider): Match {
     homeTeamPersian: faName(feed.home.name),
     homeTeamFlag: '',
     homeCrest: feed.home.logo,
+    homeTeamId: feed.home.id,
     awayTeam: feed.away.name,
     awayTeamPersian: faName(feed.away.name),
     awayTeamFlag: '',
     awayCrest: feed.away.logo,
+    awayTeamId: feed.away.id,
     homeScore: feed.homeScore,
     awayScore: feed.awayScore,
     status: feed.status,
@@ -74,9 +78,13 @@ export default function Home() {
   const [provider, setProvider] = useState<Provider>('none');
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [leagueOrder, setLeagueOrder] = useState<Record<string, number>>({});
-  const [standingsLeague, setStandingsLeague] = useState<{ id: string; name: string; logo: string } | null>(null);
-  const [apiStandings, setApiStandings] = useState<FeedStandingRow[] | null>(null);
-  const [apiScorers, setApiScorers] = useState<FeedScorer[] | null>(null);
+  const [leagues, setLeagues] = useState<FeedLeague[]>([]);
+  const [tableLeagueId, setTableLeagueId] = useState<string | null>(null);
+  const [apiStandings, setApiStandings] = useState<FeedStandingRow[]>([]);
+  const [apiScorers, setApiScorers] = useState<FeedScorer[]>([]);
+  const [tableLoading, setTableLoading] = useState(true);
+  const [showFullTable, setShowFullTable] = useState(false);
+  const [pollKey, setPollKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -85,25 +93,26 @@ export default function Home() {
     else setLoading(true);
     if (refresh) clearFeedCache();
 
-    const [feed, leagues] = await Promise.all([getMatchFeed({ refresh }), getFeedLeagues()]);
+    const [feed, allLeagues] = await Promise.all([getMatchFeed({ refresh }), getFeedLeagues()]);
     const order: Record<string, number> = {};
-    leagues.forEach((league) => {
+    allLeagues.forEach((league) => {
       order[league.id] = league.priority;
     });
     setLeagueOrder(order);
+    setLeagues(allLeagues);
     setProvider(feed.provider);
     setGeneratedAt(feed.generatedAt);
 
-    const primary =
-      leagues.find((league) => league.id === IRAN_LEAGUE_ID && league.hasData) ??
-      leagues.find((league) => league.hasData) ??
-      leagues[0];
-    if (primary) {
-      setStandingsLeague({ id: primary.id, name: primary.name, logo: primary.logo });
-      const [rows, scorers] = await Promise.all([getLeagueStandings(primary.id), getLeagueScorers(primary.id)]);
-      setApiStandings(rows.slice(0, 10));
-      setApiScorers(scorers.slice(0, 8));
-    }
+    // Keep the league the reader picked; only the first load gets a default table.
+    setTableLeagueId((current) => {
+      if (current && allLeagues.some((league) => league.id === current)) return current;
+      const preferred =
+        allLeagues.find((league) => league.id === IRAN_LEAGUE_ID && league.hasData) ??
+        allLeagues.find((league) => league.hasData) ??
+        allLeagues[0];
+      return preferred?.id ?? null;
+    });
+    setPollKey((key) => key + 1);
 
     if (feed.matches.length) {
       setLocalMatches(feed.matches.map((match) => toLocalMatch(match, feed.provider)));
@@ -117,6 +126,26 @@ export default function Home() {
     const interval = setInterval(() => loadData(), refreshInterval);
     return () => clearInterval(interval);
   }, [loadData, refreshInterval]);
+
+  useEffect(() => {
+    if (!tableLeagueId) {
+      setApiStandings([]);
+      setApiScorers([]);
+      setTableLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTableLoading(true);
+    Promise.all([getLeagueStandings(tableLeagueId), getLeagueScorers(tableLeagueId)]).then(([rows, scorers]) => {
+      if (cancelled) return;
+      setApiStandings(rows);
+      setApiScorers(scorers.slice(0, 8));
+      setTableLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tableLeagueId, pollKey]);
 
   const matches = useMemo(() => {
     const source = localMatches ?? [];
@@ -137,6 +166,19 @@ export default function Home() {
   const leagueChips = [
     ...new Map(matches.map((m) => [m.leagueId, { id: m.leagueId, name: m.leagueName, logo: m.leagueLogo }])).values(),
   ].slice(0, 8);
+
+  const tableLeagues = useMemo(() => {
+    const withData = leagues.filter((league) => league.hasData);
+    // The ESPN fallback has no standings flag, but every code it lists still resolves a table.
+    return withData.length ? withData : leagues;
+  }, [leagues]);
+  const selectedLeague = tableLeagues.find((league) => league.id === tableLeagueId) ?? null;
+  const tableRows = showFullTable ? apiStandings : apiStandings.slice(0, TABLE_PREVIEW);
+
+  const pickTableLeague = (leagueId: string) => {
+    setTableLeagueId(leagueId);
+    setShowFullTable(false);
+  };
 
   const filtered = allMatches
     .filter((m) => {
@@ -201,6 +243,20 @@ export default function Home() {
     spotlight.awayScore !== null;
   const heroLive = spotlight?.status === 'live' || spotlight?.status === 'halftime';
 
+  const heroSide = (name: string, crest: string | undefined, teamId?: string) => (
+    <button
+      type="button"
+      onClick={() => teamId && navigate(`/team/${teamId}`)}
+      className="group flex min-w-0 flex-col items-center gap-3 bg-transparent text-center"
+      aria-label={`صفحهٔ ${name}`}
+    >
+      <span className="crest-frame h-14 w-14 !rounded-2xl transition-colors group-hover:!border-[var(--line-strong)] md:h-[72px] md:w-[72px]">
+        {crest ? <img src={crest} alt="" className="h-9 w-9 object-contain md:h-11 md:w-11" /> : <span className="text-xl">⚽</span>}
+      </span>
+      <span className="display t-ink max-w-full truncate text-lg underline-offset-4 group-hover:underline md:text-[22px]">{name}</span>
+    </button>
+  );
+
   const emptyCopy = searchQuery
     ? `نتیجه‌ای برای «${searchQuery}» پیدا نشد`
     : provider === 'none'
@@ -251,7 +307,7 @@ export default function Home() {
         </div>
       ) : (
         <>
-          <div className="mt-4 grid items-stretch gap-3 lg:grid-cols-[1.6fr_1fr]">
+          <div className="mt-4 grid items-stretch gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
             {spotlight && (
               <section className="hero reveal reveal-1 p-4 md:p-6" aria-label="بازی شاخص">
                 <div className="flex items-center justify-between gap-3">
@@ -281,19 +337,8 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-4">
-                  <div className="flex min-w-0 flex-col items-center gap-3 text-center">
-                    <span className="crest-frame h-14 w-14 !rounded-2xl md:h-[72px] md:w-[72px]">
-                      {spotlight.homeCrest ? (
-                        <img src={spotlight.homeCrest} alt="" className="h-9 w-9 object-contain md:h-11 md:w-11" />
-                      ) : (
-                        <span className="text-xl">⚽</span>
-                      )}
-                    </span>
-                    <span className="display t-ink max-w-full truncate text-lg md:text-[22px]">
-                      {spotlight.homeTeamPersian}
-                    </span>
-                  </div>
+                <div className="mt-6 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:gap-4">
+                  {heroSide(spotlight.homeTeamPersian, spotlight.homeCrest, spotlight.homeTeamId)}
 
                   <div className="flex flex-col items-center gap-2">
                     {heroHasScore ? (
@@ -316,18 +361,7 @@ export default function Home() {
                     </span>
                   </div>
 
-                  <div className="flex min-w-0 flex-col items-center gap-3 text-center">
-                    <span className="crest-frame h-14 w-14 !rounded-2xl md:h-[72px] md:w-[72px]">
-                      {spotlight.awayCrest ? (
-                        <img src={spotlight.awayCrest} alt="" className="h-9 w-9 object-contain md:h-11 md:w-11" />
-                      ) : (
-                        <span className="text-xl">⚽</span>
-                      )}
-                    </span>
-                    <span className="display t-ink max-w-full truncate text-lg md:text-[22px]">
-                      {spotlight.awayTeamPersian}
-                    </span>
-                  </div>
+                  {heroSide(spotlight.awayTeamPersian, spotlight.awayCrest, spotlight.awayTeamId)}
                 </div>
 
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] pt-3">
@@ -437,33 +471,36 @@ export default function Home() {
             </div>
 
             {leagueChips.length > 1 && (
-              <div className="scroll-x mt-3 flex gap-2 border-t border-[var(--line)] pt-3">
-                <button
-                  onClick={() => setLeagueFilter(null)}
-                  className={`chip ${!leagueFilter ? 'chip-on' : ''}`}
-                >
-                  همه
-                </button>
-                {leagueChips.map((league) => (
+              <div className="mt-3 border-t border-[var(--line)] pt-3">
+                <p className="kicker mb-2">فیلتر بازی‌ها بر اساس لیگ</p>
+                <div className="scroll-x flex gap-2">
                   <button
-                    key={league.id}
-                    onClick={() => setLeagueFilter(leagueFilter === league.id ? null : league.id)}
-                    className={`chip ${leagueFilter === league.id ? 'chip-on' : ''}`}
+                    onClick={() => setLeagueFilter(null)}
+                    className={`chip shrink-0 ${!leagueFilter ? 'chip-on' : ''}`}
                   >
-                    {league.logo ? (
-                      <img src={league.logo} alt="" className="h-4 w-4 object-contain" />
-                    ) : (
-                      <span>⚽</span>
-                    )}
-                    <span className="max-w-[92px] truncate">{league.name}</span>
+                    همه
                   </button>
-                ))}
+                  {leagueChips.map((league) => (
+                    <button
+                      key={league.id}
+                      onClick={() => setLeagueFilter(leagueFilter === league.id ? null : league.id)}
+                      className={`chip shrink-0 ${leagueFilter === league.id ? 'chip-on' : ''}`}
+                    >
+                      {league.logo ? (
+                        <img src={league.logo} alt="" className="h-4 w-4 object-contain" />
+                      ) : (
+                        <span>⚽</span>
+                      )}
+                      <span className="max-w-[92px] truncate">{league.name}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </section>
 
-          <div className="mt-7 grid items-start gap-7 lg:grid-cols-[1.55fr_1fr]">
-            <section className="reveal reveal-4">
+          <div className="mt-7 grid items-start gap-7 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+            <section className="reveal reveal-4 min-w-0">
               <SectionHead index="۰۱" title="بازی‌ها" meta={`${toPersian(filtered.length)} بازی`} />
               <div className="space-y-2.5">
                 {filtered.length === 0 ? (
@@ -480,13 +517,15 @@ export default function Home() {
               </div>
             </section>
 
-            <aside className="space-y-7">
+            <aside className="min-w-0 space-y-7">
               <section>
                 <SectionHead
                   index="۰۲"
-                  title={`جدول ${standingsLeague?.name ?? 'لیگ'}`}
+                  title={`جدول ${selectedLeague?.name ?? 'لیگ'}`}
                   meta={
-                    provider === 'varzesh3' ? (
+                    tableLoading ? (
+                      'بروزرسانی'
+                    ) : provider === 'varzesh3' ? (
                       <span className="flex items-center gap-1.5">
                         <span className="live-dot" />
                         زنده
@@ -495,8 +534,36 @@ export default function Home() {
                   }
                 />
                 <div className="plate overflow-hidden">
-                  {!apiStandings || apiStandings.length === 0 ? (
-                    <p className="p-8 text-center text-xs t-faint">جدول در دسترس نیست</p>
+                  {tableLeagues.length > 1 && (
+                    <div className="scroll-x flex items-center gap-2 border-b border-[var(--line)] p-2.5">
+                      {tableLeagues.map((league) => (
+                        <button
+                          key={league.id}
+                          onClick={() => pickTableLeague(league.id)}
+                          aria-pressed={league.id === tableLeagueId}
+                          className={`chip shrink-0 ${league.id === tableLeagueId ? 'chip-on' : ''}`}
+                        >
+                          {league.logo ? (
+                            <img src={league.logo} alt="" className="h-4 w-4 object-contain" />
+                          ) : (
+                            <span>🏆</span>
+                          )}
+                          <span className="max-w-[104px] truncate">{league.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {tableLoading ? (
+                    <div className="space-y-2 p-3">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="skeleton h-8" />
+                      ))}
+                    </div>
+                  ) : apiStandings.length === 0 ? (
+                    <p className="p-8 text-center text-xs t-faint">
+                      {tableLeagues.length ? 'برای این لیگ جدولی منتشر نشده است' : 'هنوز جدولی همگام‌سازی نشده است'}
+                    </p>
                   ) : (
                     <>
                       <div className="table-wrap">
@@ -511,7 +578,7 @@ export default function Home() {
                             </tr>
                           </thead>
                           <tbody>
-                            {apiStandings.map((row) => (
+                            {tableRows.map((row) => (
                               <tr key={row.teamId}>
                                 <td className="px-3">
                                   <span className="flex items-center justify-end gap-1.5">
@@ -525,10 +592,15 @@ export default function Home() {
                                   </span>
                                 </td>
                                 <td>
-                                  <span className="flex items-center gap-1.5">
+                                  <Link
+                                    to={`/team/${row.teamId}`}
+                                    className="group flex items-center gap-1.5 rounded-md py-0.5"
+                                  >
                                     {row.teamLogo && <img src={row.teamLogo} alt="" className="h-4 w-4 shrink-0 object-contain" />}
-                                    <span className="max-w-[120px] truncate font-semibold t-soft">{row.teamName}</span>
-                                  </span>
+                                    <span className="max-w-[120px] truncate font-semibold t-soft group-hover:underline group-hover:underline-offset-4">
+                                      {row.teamName}
+                                    </span>
+                                  </Link>
                                 </td>
                                 <td className="num text-center">{toPersian(row.played)}</td>
                                 <td
@@ -545,6 +617,15 @@ export default function Home() {
                           </tbody>
                         </table>
                       </div>
+                      {apiStandings.length > TABLE_PREVIEW && (
+                        <button
+                          onClick={() => setShowFullTable((value) => !value)}
+                          className="flex w-full items-center justify-center gap-1.5 border-t border-[var(--line)] py-2.5 text-[11px] font-bold t-soft transition-colors hover:bg-[var(--surface-2)]"
+                        >
+                          {showFullTable ? 'بستن جدول' : `نمایش کل جدول · ${toPersian(apiStandings.length)} تیم`}
+                          <ChevronDown size={13} className={showFullTable ? 'rotate-180' : ''} />
+                        </button>
+                      )}
                       <div className="flex items-center gap-3 border-t border-[var(--line)] px-3 py-2.5 text-[9.5px] t-faint">
                         <span className="flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
@@ -554,6 +635,7 @@ export default function Home() {
                           <span className="h-1.5 w-1.5 rounded-full bg-[var(--live)]" />
                           سقوط
                         </span>
+                        <span className="mr-auto">روی نام تیم بزنید</span>
                       </div>
                     </>
                   )}
@@ -561,9 +643,15 @@ export default function Home() {
               </section>
 
               <section>
-                <SectionHead index="۰۳" title="گلزنان برتر" meta={standingsLeague?.name} />
+                <SectionHead index="۰۳" title="گلزنان برتر" meta={selectedLeague?.name} />
                 <div className="plate divide-hair overflow-hidden">
-                  {!apiScorers || apiScorers.length === 0 ? (
+                  {tableLoading ? (
+                    <div className="space-y-2 p-3">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="skeleton h-10" />
+                      ))}
+                    </div>
+                  ) : apiScorers.length === 0 ? (
                     <p className="p-8 text-center text-xs t-faint">گلزنان در دسترس نیستند</p>
                   ) : (
                     apiScorers.map((scorer, index) => (
@@ -586,7 +674,16 @@ export default function Home() {
                         )}
                         <div className="min-w-0 flex-1">
                           <p className="t-ink truncate text-[12px] font-bold">{scorer.name}</p>
-                          <p className="truncate text-[10px] t-faint">{scorer.teamName}</p>
+                          {scorer.teamId ? (
+                            <Link
+                              to={`/team/${scorer.teamId}`}
+                              className="block truncate text-[10px] t-faint hover:underline hover:underline-offset-2"
+                            >
+                              {scorer.teamName}
+                            </Link>
+                          ) : (
+                            <p className="truncate text-[10px] t-faint">{scorer.teamName}</p>
+                          )}
                         </div>
                         <div className="flex shrink-0 items-baseline gap-2">
                           <span className="num t-ink text-[15px] font-black">{toPersian(scorer.goals)}</span>

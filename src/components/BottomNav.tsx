@@ -12,8 +12,12 @@ export default function BottomNav() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const isActive = (path: string) =>
-    path === '/' ? pathname === '/' || pathname.startsWith('/match') : pathname.startsWith(path);
+  const isActive = (path: string) => {
+    if (path === '/') return pathname === '/' || pathname.startsWith('/match');
+    // The club page (/team/:id) still belongs to the teams tab.
+    if (path === '/teams') return pathname.startsWith('/team');
+    return pathname.startsWith(path);
+  };
 
   return (
     <nav className="dock" aria-label="ناوبری اصلی">

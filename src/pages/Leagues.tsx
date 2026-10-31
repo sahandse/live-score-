@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Search, Star, Users, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
 import {
@@ -274,12 +274,17 @@ export default function Leagues() {
                                           </span>
                                         </td>
                                         <td>
-                                          <span className="flex items-center gap-1.5">
+                                          <Link
+                                            to={`/team/${row.teamId}`}
+                                            className="group flex items-center gap-1.5 rounded-md py-0.5"
+                                          >
                                             {row.teamLogo && (
                                               <img src={row.teamLogo} alt="" className="h-4 w-4 shrink-0 object-contain" />
                                             )}
-                                            <span className="max-w-[130px] truncate font-semibold t-soft">{row.teamName}</span>
-                                          </span>
+                                            <span className="max-w-[130px] truncate font-semibold t-soft group-hover:underline group-hover:underline-offset-4">
+                                              {row.teamName}
+                                            </span>
+                                          </Link>
                                         </td>
                                         <td className="num text-center">{toPersian(row.played)}</td>
                                         <td className="num hidden text-center t-accent sm:table-cell">{toPersian(row.won)}</td>
@@ -429,19 +434,25 @@ export default function Leagues() {
                         ) : (
                           <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
                             {teams.map((team) => (
-                              <div key={team.id} className="inset flex items-center gap-2 p-2.5">
+                              <button
+                                key={team.id}
+                                onClick={() => navigate(`/team/${team.id}`)}
+                                className="inset group flex items-center gap-2 p-2.5 text-right transition-colors hover:!border-[var(--line-strong)]"
+                              >
                                 {team.logo ? (
                                   <img src={team.logo} alt="" className="h-6 w-6 shrink-0 object-contain" />
                                 ) : (
                                   <span className="text-lg">🛡️</span>
                                 )}
                                 <div className="min-w-0">
-                                  <p className="t-soft truncate text-[11px] font-bold">{team.name}</p>
+                                  <p className="t-soft truncate text-[11px] font-bold group-hover:underline group-hover:underline-offset-4">
+                                    {team.name}
+                                  </p>
                                   <p className="num truncate text-[9.5px] t-faint">
                                     رتبه {toPersian(team.rank)} · {toPersian(team.points)} امتیاز
                                   </p>
                                 </div>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         ))}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Search, Star, Trophy, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
@@ -262,7 +263,16 @@ export default function Players() {
                     </div>
                     <div className="mt-1 flex items-center gap-1.5">
                       {player.teamLogo && <img src={player.teamLogo} alt="" className="h-3.5 w-3.5 shrink-0 object-contain" />}
-                      <span className="truncate text-[10px] t-faint">{player.teamName}</span>
+                      {player.teamId ? (
+                        <Link
+                          to={`/team/${player.teamId}`}
+                          className="truncate text-[10px] t-faint hover:underline hover:underline-offset-2"
+                        >
+                          {player.teamName}
+                        </Link>
+                      ) : (
+                        <span className="truncate text-[10px] t-faint">{player.teamName}</span>
+                      )}
                       {player.number > 0 && (
                         <span className="num hidden shrink-0 text-[10px] t-faint sm:inline">#{toPersian(player.number)}</span>
                       )}

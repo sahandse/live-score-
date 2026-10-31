@@ -93,17 +93,24 @@ export default function MatchCard({ match }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-3">
-        <div className="flex min-w-0 items-center justify-end gap-2.5">
-          <span className="match-team truncate">{match.homeTeamPersian}</span>
-          <span className="crest-frame h-8 w-8">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (match.homeTeamId) navigate(`/team/${match.homeTeamId}`);
+          }}
+          className="group/name flex min-w-0 items-center justify-end gap-2.5 bg-transparent text-right"
+        >
+          <span className="match-team min-w-0 truncate group-hover/name:underline">{match.homeTeamPersian}</span>
+          <span className="crest-frame h-8 w-8 shrink-0">
             {match.homeCrest ? (
               <img src={match.homeCrest} alt="" className="h-5 w-5 object-contain" />
             ) : (
               <span className="text-[11px]">⚽</span>
             )}
           </span>
-        </div>
+        </button>
 
         {hasScore ? (
           <div className={`score ${isLive ? 'score-live' : ''}`}>
@@ -115,16 +122,23 @@ export default function MatchCard({ match }: Props) {
           <div className="score score-empty">{match.status === 'upcoming' ? 'VS' : '—'}</div>
         )}
 
-        <div className="flex min-w-0 items-center justify-start gap-2.5">
-          <span className="crest-frame h-8 w-8">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (match.awayTeamId) navigate(`/team/${match.awayTeamId}`);
+          }}
+          className="group/name flex min-w-0 items-center justify-start gap-2.5 bg-transparent text-left"
+        >
+          <span className="crest-frame h-8 w-8 shrink-0">
             {match.awayCrest ? (
               <img src={match.awayCrest} alt="" className="h-5 w-5 object-contain" />
             ) : (
               <span className="text-[11px]">⚽</span>
             )}
           </span>
-          <span className="match-team truncate">{match.awayTeamPersian}</span>
-        </div>
+          <span className="match-team min-w-0 truncate group-hover/name:underline">{match.awayTeamPersian}</span>
+        </button>
       </div>
 
       <div className="flex items-center justify-between border-t border-[var(--line)] px-4 py-2 text-[10px] t-faint">

@@ -4,10 +4,12 @@ export interface Match {
   homeTeamPersian: string;
   homeTeamFlag: string;
   homeCrest?: string;
+  homeTeamId?: string;
   awayTeam: string;
   awayTeamPersian: string;
   awayTeamFlag: string;
   awayCrest?: string;
+  awayTeamId?: string;
   homeScore: number | null;
   awayScore: number | null;
   status: 'live' | 'finished' | 'upcoming' | 'halftime' | 'postponed' | 'cancelled';
