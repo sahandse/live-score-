@@ -1,7 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 
-export type AppTab = 'live' | 'groups' | 'schedule' | 'bracket' | 'teams';
-
 interface Reminder {
   id: string;
   matchId: string;
@@ -22,8 +20,6 @@ interface AppContextType {
   addReminder: (reminder: Reminder) => void;
   removeReminder: (matchId: string) => void;
   hasReminder: (matchId: string) => boolean;
-  tab: AppTab;
-  setTab: (t: AppTab) => void;
   refreshInterval: number;
   setRefreshInterval: (n: number) => void;
 }
@@ -46,8 +42,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [tab, setTab] = useState<AppTab>('live');
-
   const [refreshInterval, setRefreshIntervalState] = useState<number>(() => {
     const s = localStorage.getItem('refreshInterval');
     return s ? Number(s) : 120000;
@@ -55,11 +49,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     localStorage.setItem('darkMode', JSON.stringify(darkMode));
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', darkMode);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', darkMode ? '#070a08' : '#f2ede2');
   }, [darkMode]);
 
   useEffect(() => {
@@ -100,7 +91,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       darkMode, toggleDarkMode,
       favorites, toggleFavorite, isFavorite,
       reminders, addReminder, removeReminder, hasReminder,
-      tab, setTab,
       refreshInterval, setRefreshInterval,
     }}>
       {children}

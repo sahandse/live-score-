@@ -1,4 +1,5 @@
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { useEffect } from 'react';
+import { HashRouter, Routes, Route, useLocation, useNavigationType } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
@@ -7,6 +8,22 @@ import Leagues from './pages/Leagues';
 import Teams from './pages/Teams';
 import Players from './pages/Players';
 import MatchDetail from './pages/MatchDetail';
+
+const scrollMemory = new Map<string, number>();
+
+function ScrollManager() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
+
+  useEffect(() => {
+    window.scrollTo(0, navigationType === 'POP' ? (scrollMemory.get(location.key) ?? 0) : 0);
+    return () => {
+      scrollMemory.set(location.key, window.scrollY);
+    };
+  }, [location.key, navigationType]);
+
+  return null;
+}
 
 function AppContent() {
   return (
@@ -31,6 +48,7 @@ export default function App() {
   return (
     <HashRouter>
       <AppProvider>
+        <ScrollManager />
         <AppContent />
       </AppProvider>
     </HashRouter>

@@ -68,6 +68,7 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  height: 100%;
 }
 
 body {
@@ -79,10 +80,19 @@ body {
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
 }
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button,
+[role='button'] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
@@ -108,6 +118,8 @@ body {
 
 .scroll-x {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
 }
 .scroll-x::-webkit-scrollbar { display: none; }
@@ -151,7 +163,8 @@ body {
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 18px 16px 122px;
+  padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(112px + env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
 }
 
 .page-narrow {
@@ -246,7 +259,7 @@ body {
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--muted);
-  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, transform 0.12s ease;
 }
 
 .iconbtn:hover {
@@ -266,7 +279,7 @@ body {
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
-  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, transform 0.12s ease;
 }
 
 .chip:hover {
@@ -432,6 +445,8 @@ body {
 
 .table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
 }
 .table-wrap::-webkit-scrollbar { display: none; }
@@ -619,6 +634,9 @@ body {
   position: sticky;
   top: 0;
   z-index: 40;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   -webkit-backdrop-filter: blur(18px) saturate(1.2);
@@ -629,26 +647,33 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
   background: var(--ink);
   color: var(--accent);
   border: 1px solid var(--line-strong);
   flex-shrink: 0;
 }
 
+@media (min-width: 768px) {
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+}
+
 .dock {
   position: fixed;
   left: 50%;
-  bottom: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 50;
-  width: min(94vw, 470px);
+  width: min(calc(100vw - 24px), 470px);
   display: flex;
   gap: 3px;
   padding: 6px;
-  padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
   border-radius: 18px;
   border: 1px solid var(--line-strong);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
@@ -668,12 +693,16 @@ body {
   color: var(--muted);
   font-size: 10px;
   font-weight: 600;
-  transition: color 0.18s ease, background 0.18s ease;
+  transition: color 0.18s ease, background 0.18s ease, transform 0.12s ease;
 }
 
 .dock-item:hover {
   color: var(--ink);
   background: var(--surface-2);
+}
+
+.dock-item:active {
+  transform: scale(0.95);
 }
 
 .dock-on,
@@ -779,6 +808,59 @@ body {
   background: linear-gradient(100deg, var(--surface-2) 30%, var(--surface-3) 50%, var(--surface-2) 70%);
   background-size: 200% 100%;
   animation: shimmer 1.5s linear infinite;
+}
+
+/* ── Phone tuning ───────────────────────────────────────────────────────── */
+
+@media (max-width: 767px) {
+  .field input {
+    font-size: 16px;
+  }
+  .select {
+    font-size: 16px;
+  }
+  .chip {
+    padding: 8px 13px;
+  }
+  .iconbtn {
+    width: 40px;
+    height: 40px;
+  }
+  .hero {
+    border-radius: 18px;
+  }
+  .hero::after {
+    width: 230px;
+    height: 230px;
+  }
+}
+
+@media (max-width: 420px) {
+  .seg-item {
+    font-size: 10.5px;
+    gap: 4px;
+    padding: 8px 4px;
+  }
+  .seg-count {
+    display: none;
+  }
+}
+
+@media (hover: none) {
+  .lift:hover,
+  .matchplate:hover {
+    transform: none;
+  }
+
+  .matchplate:active,
+  .plate.lift:active {
+    transform: scale(0.985);
+    transition-duration: 0.08s;
+  }
+
+  .chip:active {
+    transform: scale(0.96);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

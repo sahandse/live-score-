@@ -150,57 +150,6 @@ export function translateStatus(status: string): { label: string; type: 'live' |
   }
 }
 
-// ─── Zone helpers (standings color coding) ───────────────────────────────────
-
-export type ZoneType = 'ucl' | 'uel' | 'uecl' | 'relegation_playoff' | 'relegation';
-
-export function getZoneType(code: string, position: number, total: number): ZoneType | null {
-  switch (code) {
-    case 'eng.1': // Premier League
-      if (position <= 4) return 'ucl';
-      if (position === 5) return 'uel';
-      if (position === 6) return 'uecl';
-      if (position >= total - 2) return 'relegation';
-      return null;
-    case 'esp.1': // LaLiga
-    case 'ita.1': // Serie A
-      if (position <= 4) return 'ucl';
-      if (position === 5) return 'uel';
-      if (position === 6) return 'uecl';
-      if (position >= total - 2) return 'relegation';
-      return null;
-    case 'ger.1': // Bundesliga
-      if (position <= 4) return 'ucl';
-      if (position === 5) return 'uel';
-      if (position === 6) return 'uecl';
-      if (position === total - 1) return 'relegation_playoff';
-      if (position >= total) return 'relegation';
-      return null;
-    case 'fra.1': // Ligue 1
-      if (position <= 3) return 'ucl';
-      if (position <= 5) return 'uel';
-      if (position === 6) return 'uecl';
-      if (position === total - 1) return 'relegation_playoff';
-      if (position >= total) return 'relegation';
-      return null;
-    default:
-      if (position <= 4) return 'ucl';
-      if (position >= total - 2) return 'relegation';
-      return null;
-  }
-}
-
-export function zoneColor(zone: ZoneType | null): string {
-  switch (zone) {
-    case 'ucl':               return 'bg-emerald-500';
-    case 'uel':               return 'bg-orange-500';
-    case 'uecl':              return 'bg-sky-400';
-    case 'relegation_playoff': return 'bg-amber-500';
-    case 'relegation':        return 'bg-red-500';
-    default:                  return 'bg-transparent';
-  }
-}
-
 // ─── Data conversion ──────────────────────────────────────────────────────────
 
 function eventsToMatches(events: any[], code: string): LiveMatch[] {
@@ -282,12 +231,6 @@ export async function getRecentMatches(): Promise<LiveMatch[] | null> {
       .then(d => d?.events ? eventsToMatches(d.events.filter((e: any) => e.status?.type?.completed), code) : []),
   ]);
   return dedupe((await Promise.all(fetches)).flat());
-}
-
-export async function getCompetitionMatches(code: string): Promise<LiveMatch[] | null> {
-  const d = await espnGet<any>(`${code}/scoreboard`);
-  if (!d?.events) return null;
-  return eventsToMatches(d.events, code);
 }
 
 export async function getStandings(code: string): Promise<Standing[] | null> {

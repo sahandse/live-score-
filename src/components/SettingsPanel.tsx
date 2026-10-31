@@ -46,9 +46,9 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="fixed inset-0 z-[60] bg-black/55 backdrop-blur-[2px]" onClick={onClose} />
 
-      <div className="sheet fixed bottom-0 left-0 right-0 z-50 max-h-[88vh] overflow-y-auto">
+      <div className="sheet fixed bottom-0 left-0 right-0 z-[60] max-h-[88dvh] overflow-y-auto overscroll-contain">
         <div className="mx-auto w-full max-w-lg px-5 pb-[calc(28px+env(safe-area-inset-bottom,0px))]">
           <div className="flex justify-center pt-3 pb-2">
             <div className="h-1 w-10 rounded-full bg-[var(--line-strong)]" />

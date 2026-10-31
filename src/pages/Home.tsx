@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Search, X } from 'lucide-react';
 import { toPersian } from '../hooks/usePersianDate';
+import { useApp } from '../context/AppContext';
 import MatchCard from '../components/MatchCard';
 import { toPersianTeamName } from '../data/teamNames';
 import {
@@ -65,6 +66,7 @@ function SectionHead({ index, title, meta }: { index: string; title: string; met
 
 export default function Home() {
   const navigate = useNavigate();
+  const { refreshInterval } = useApp();
   const [tab, setTab] = useState<Tab>('live');
   const [searchQuery, setSearchQuery] = useState('');
   const [leagueFilter, setLeagueFilter] = useState<string | null>(null);
@@ -112,9 +114,9 @@ export default function Home() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(() => loadData(), 60_000);
+    const interval = setInterval(() => loadData(), refreshInterval);
     return () => clearInterval(interval);
-  }, [loadData]);
+  }, [loadData, refreshInterval]);
 
   const matches = useMemo(() => {
     const source = localMatches ?? [];

@@ -139,7 +139,7 @@ export default function Leagues() {
         </div>
         <button
           onClick={() => setOnlyWithData((value) => !value)}
-          className={`chip justify-center !py-2.5 ${onlyWithData ? 'chip-on' : ''}`}
+          className={`chip justify-center self-start !py-2.5 sm:self-auto ${onlyWithData ? 'chip-on' : ''}`}
         >
           فقط لیگ‌های دارای داده
         </button>

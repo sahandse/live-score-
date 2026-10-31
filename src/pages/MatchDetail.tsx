@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, RefreshCw } from 'lucide-react';
 import { toPersian } from '../hooks/usePersianDate';
+import { useApp } from '../context/AppContext';
 import {
   getFeedMatchDetail,
   type FeedEvent,
@@ -50,6 +51,7 @@ const groupByLine = (players: FeedLineupPlayer[]) => {
 export default function MatchDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { refreshInterval } = useApp();
   const [detail, setDetail] = useState<FeedMatchDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,9 +88,9 @@ export default function MatchDetail() {
 
   useEffect(() => {
     if (detail?.status !== 'live') return;
-    const interval = setInterval(() => fetchMatch(true), 120_000);
+    const interval = setInterval(() => fetchMatch(true), refreshInterval);
     return () => clearInterval(interval);
-  }, [detail, fetchMatch]);
+  }, [detail, fetchMatch, refreshInterval]);
 
   const panels: { key: Panel; label: string; count: number }[] = detail
     ? [
@@ -280,26 +282,26 @@ export default function MatchDetail() {
                 <div className="divide-hair">
                   {detail.events.map((event, i) => (
                     <div key={i} className="flex items-center px-3 py-2.5 md:px-4">
-                      <div className="flex flex-1 flex-col items-end">
+                      <div className="flex min-w-0 flex-1 flex-col items-end">
                         {event.isHome && (
                           <>
-                            <span className="t-ink text-[12.5px] font-bold">{event.player}</span>
+                            <span className="t-ink max-w-full truncate text-[12.5px] font-bold">{event.player}</span>
                             {eventCaption(event) && (
-                              <span className="text-[10px] t-faint">{eventCaption(event)}</span>
+                              <span className="max-w-full truncate text-[10px] t-faint">{eventCaption(event)}</span>
                             )}
                           </>
                         )}
                       </div>
-                      <div className="mx-3 flex min-w-[72px] items-center justify-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1">
+                      <div className="mx-2 flex min-w-[64px] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 md:mx-3 md:min-w-[72px]">
                         <span className="text-sm leading-none">{eventIcon(event.type)}</span>
                         <span className="num text-[10.5px] font-bold t-muted">{toPersian(event.minute)}′</span>
                       </div>
-                      <div className="flex flex-1 flex-col items-start">
+                      <div className="flex min-w-0 flex-1 flex-col items-start">
                         {!event.isHome && (
                           <>
-                            <span className="t-ink text-[12.5px] font-bold">{event.player}</span>
+                            <span className="t-ink max-w-full truncate text-[12.5px] font-bold">{event.player}</span>
                             {eventCaption(event) && (
-                              <span className="text-[10px] t-faint">{eventCaption(event)}</span>
+                              <span className="max-w-full truncate text-[10px] t-faint">{eventCaption(event)}</span>
                             )}
                           </>
                         )}
@@ -342,13 +344,13 @@ export default function MatchDetail() {
                     );
                   })}
                   <div className="flex items-center justify-center gap-4 border-t border-[var(--line)] pt-3 text-[9.5px] t-faint">
-                    <span className="flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                      {detail.home.name}
+                    <span className="flex min-w-0 max-w-[45%] items-center gap-1">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" />
+                      <span className="truncate">{detail.home.name}</span>
                     </span>
-                    <span className="flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--blue)]" />
-                      {detail.away.name}
+                    <span className="flex min-w-0 max-w-[45%] items-center gap-1">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--blue)]" />
+                      <span className="truncate">{detail.away.name}</span>
                     </span>
                   </div>
                 </div>
