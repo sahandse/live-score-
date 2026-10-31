@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Search, Star, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, Star, Users, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
@@ -28,7 +28,7 @@ type LeagueData = {
 };
 
 export default function Leagues() {
-  const { darkMode, isFavorite, toggleFavorite } = useApp();
+  const { isFavorite, toggleFavorite } = useApp();
   const navigate = useNavigate();
   const [leagues, setLeagues] = useState<FeedLeague[]>([]);
   const [teamsByLeague, setTeamsByLeague] = useState<Record<string, FeedTeam[]>>({});
@@ -106,43 +106,46 @@ export default function Leagues() {
     { key: 'teams', label: 'تیم‌ها' },
   ];
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6">
-      <div className="flex items-center justify-between mb-5">
-        <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>لیگ‌ها</h2>
-        <span className={`text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-          {toPersian(visible.length)} لیگ · {toPersian(leagues.filter((l) => l.hasData).length)} با جدول و آمار
-        </span>
-      </div>
+  const withData = leagues.filter((league) => league.hasData).length;
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <div className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl border flex-1 ${
-          darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'
-        }`}>
-          <Search size={16} className={darkMode ? 'text-gray-600' : 'text-gray-400'} />
+  return (
+    <div className="page">
+      <header className="reveal mb-6 flex items-end justify-between gap-4">
+        <div>
+          <p className="kicker">COMPETITIONS — ۰۱</p>
+          <h2 className="display t-ink mt-1 text-[40px] leading-none md:text-5xl">لیگ‌ها</h2>
+        </div>
+        <div className="text-left">
+          <p className="display num t-ink text-2xl leading-none">{toPersian(visible.length)}</p>
+          <p className="mt-1 text-[10px] t-faint">لیگ · {toPersian(withData)} با جدول</p>
+        </div>
+      </header>
+
+      <div className="reveal reveal-1 mb-4 flex flex-col gap-2.5 sm:flex-row">
+        <div className="field flex-1">
+          <Search size={15} className="t-faint shrink-0" />
           <input
             type="text"
             placeholder="جستجوی لیگ..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className={`flex-1 bg-transparent text-sm outline-none ${
-              darkMode ? 'text-gray-200 placeholder:text-gray-700' : 'text-gray-700 placeholder:text-gray-400'
-            }`}
+            aria-label="جستجوی لیگ"
           />
+          {search && (
+            <button onClick={() => setSearch('')} className="t-faint hover:text-[var(--ink-soft)]" aria-label="پاک کردن جستجو">
+              <X size={14} />
+            </button>
+          )}
         </div>
         <button
           onClick={() => setOnlyWithData((value) => !value)}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-colors ${
-            onlyWithData
-              ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white'
-              : darkMode ? 'bg-gray-900 text-gray-400 hover:bg-gray-800' : 'bg-white text-gray-500 hover:bg-gray-100 shadow-sm'
-          }`}
+          className={`chip justify-center !py-2.5 ${onlyWithData ? 'chip-on' : ''}`}
         >
           فقط لیگ‌های دارای داده
         </button>
       </div>
 
-      <div className="space-y-3">
+      <div className="reveal reveal-2 space-y-2.5">
         {visible.map((league) => {
           const isExpanded = expanded === league.id;
           const leagueData = data[league.id];
@@ -150,202 +153,211 @@ export default function Leagues() {
           const isLoading = loadingId === league.id;
 
           return (
-            <div key={league.id} className={`rounded-2xl border overflow-hidden ${
-              darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'
-            }`}>
-              <button
+            <article
+              key={league.id}
+              className={`plate overflow-hidden lift ${isExpanded ? '!border-[var(--line-strong)]' : ''}`}
+            >
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => handleExpand(league.id)}
-                className={`w-full flex items-center gap-3 p-4 text-right transition-colors ${
-                  darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'
-                }`}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleExpand(league.id);
+                  }
+                }}
+                className="flex w-full cursor-pointer items-center gap-3 p-3.5 text-right md:p-4"
               >
-                {league.logo ? (
-                  <img src={league.logo} alt="" className="w-9 h-9 object-contain flex-shrink-0" />
-                ) : (
-                  <span className="text-2xl flex-shrink-0">🏆</span>
-                )}
-                <div className="flex-1 min-w-0">
-                  <h3 className={`font-bold text-sm truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{league.name}</h3>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span className="crest-frame h-11 w-11 !rounded-xl">
+                  {league.logo ? (
+                    <img src={league.logo} alt="" className="h-6 w-6 object-contain" />
+                  ) : (
+                    <span className="text-lg">🏆</span>
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="display t-ink truncate text-xl">{league.name}</h3>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] t-muted">
                     {league.hasData ? (
-                      <span className="flex items-center gap-1 text-xs text-emerald-500">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-pulse" />
+                      <span className="flex items-center gap-1 t-accent">
+                        <span className="h-1 w-1 rounded-full bg-[var(--accent)]" />
                         جدول، گلزنان و برنامه بازی‌ها
                       </span>
                     ) : (
-                      <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>فقط نتیجه بازی‌های این لیگ</span>
+                      <span className="t-faint">فقط نتیجه بازی‌های این لیگ</span>
                     )}
                     {teams.length > 0 && (
-                      <span className={`flex items-center gap-1 text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                        <Users size={11} />
+                      <span className="flex items-center gap-1">
+                        <Users size={10} />
                         {toPersian(teams.length)} تیم
                       </span>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex shrink-0 items-center gap-1">
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
                       toggleFavorite(league.id);
                     }}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      isFavorite(league.id)
-                        ? 'text-yellow-400'
-                        : darkMode ? 'text-gray-700 hover:text-gray-500' : 'text-gray-300 hover:text-gray-500'
+                    className={`rounded-md p-1.5 transition-colors ${
+                      isFavorite(league.id) ? 'text-[var(--gold)]' : 't-faint hover:text-[var(--ink-soft)]'
                     }`}
+                    aria-label="لیگ محبوب"
                   >
-                    <Star size={16} fill={isFavorite(league.id) ? 'currentColor' : 'none'} />
+                    <Star size={15} fill={isFavorite(league.id) ? 'currentColor' : 'none'} />
                   </button>
-                  <span className={darkMode ? 'text-gray-600' : 'text-gray-400'}>
-                    {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] t-muted">
+                    {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                   </span>
                 </div>
-              </button>
+              </div>
 
               {isExpanded && (
-                <div className={`border-t ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
+                <div className="border-t border-[var(--line)]">
                   {isLoading || !leagueData ? (
-                    <div className="p-5 space-y-2">
+                    <div className="space-y-2 p-4">
                       {Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className={`h-8 rounded-xl animate-pulse ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`} />
+                        <div key={i} className="skeleton h-8" />
                       ))}
                     </div>
                   ) : (
                     <>
-                      <div className={`flex border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
-                        {panels.map(({ key, label }) => (
-                          <button
-                            key={key}
-                            onClick={() => setActiveTab(key)}
-                            className={`flex-1 py-2.5 text-xs font-bold transition-colors ${
-                              activeTab === key
-                                ? darkMode
-                                  ? 'text-emerald-400 border-b-2 border-emerald-500'
-                                  : 'text-emerald-600 border-b-2 border-emerald-500'
-                                : darkMode ? 'text-gray-600 hover:text-gray-400' : 'text-gray-400 hover:text-gray-600'
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        ))}
+                      <div className="p-3">
+                        <div className="seg">
+                          {panels.map(({ key, label }) => (
+                            <button
+                              key={key}
+                              onClick={() => setActiveTab(key)}
+                              className={`seg-item ${activeTab === key ? 'seg-item-on' : ''}`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
-                      {activeTab === 'standings' && (
-                        leagueData.standings.length === 0 ? (
-                          <p className={`text-center py-6 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>جدولی برای این لیگ منتشر نشده است</p>
+                      {activeTab === 'standings' &&
+                        (leagueData.standings.length === 0 ? (
+                          <p className="py-8 text-center text-xs t-faint">جدولی برای این لیگ منتشر نشده است</p>
                         ) : (
                           <>
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className={darkMode ? 'text-gray-600' : 'text-gray-400'}>
-                                  <th className="px-3 py-2.5 text-right w-8">#</th>
-                                  <th className="px-3 py-2.5 text-right">تیم</th>
-                                  <th className="px-2 py-2.5 text-center">ب</th>
-                                  <th className="px-2 py-2.5 text-center text-emerald-500">B</th>
-                                  <th className="px-2 py-2.5 text-center">M</th>
-                                  <th className="px-2 py-2.5 text-center text-red-400">B</th>
-                                  <th className="px-2 py-2.5 text-center">GD</th>
-                                  <th className="px-2 py-2.5 text-center font-bold">ام</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {leagueData.standings.map((row) => {
-                                  const gd = row.goalDifference;
-                                  return (
-                                    <tr
-                                      key={row.teamId}
-                                      className={`border-t transition-colors ${
-                                        darkMode ? 'border-gray-800 hover:bg-gray-800/40' : 'border-gray-50 hover:bg-gray-50'
-                                      }`}
-                                    >
-                                      <td className="px-3 py-2.5">
-                                        <div className="flex items-center gap-1.5 justify-end">
-                                          <span className={`font-bold ${row.rank <= 4 ? 'text-emerald-500' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                            {toPersian(row.rank)}
+                            <div className="table-wrap">
+                              <table className="table">
+                                <thead>
+                                  <tr>
+                                    <th className="w-8 px-3 text-right">#</th>
+                                    <th className="text-right">تیم</th>
+                                    <th className="text-center">بازی</th>
+                                    <th className="hidden text-center sm:table-cell">برد</th>
+                                    <th className="hidden text-center sm:table-cell">تساوی</th>
+                                    <th className="hidden text-center sm:table-cell">باخت</th>
+                                    <th className="text-center">تفاضل</th>
+                                    <th className="text-center">امتیاز</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {leagueData.standings.map((row) => {
+                                    const gd = row.goalDifference;
+                                    return (
+                                      <tr key={row.teamId}>
+                                        <td className="px-3">
+                                          <span className="flex items-center justify-end gap-1.5">
+                                            {row.qualificationColor && (
+                                              <span
+                                                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                                style={{ backgroundColor: row.qualificationColor }}
+                                              />
+                                            )}
+                                            <span className="rank">{toPersian(row.rank)}</span>
                                           </span>
-                                          {row.qualificationColor && (
-                                            <span
-                                              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                                              style={{ backgroundColor: row.qualificationColor }}
-                                            />
-                                          )}
-                                        </div>
-                                      </td>
-                                      <td className={`px-3 py-2.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                        <div className="flex items-center gap-1.5">
-                                          {row.teamLogo && <img src={row.teamLogo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />}
-                                          <span className="font-medium truncate max-w-[130px]">{row.teamName}</span>
-                                        </div>
-                                      </td>
-                                      <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{toPersian(row.played)}</td>
-                                      <td className="px-2 py-2.5 text-center text-emerald-500 font-medium">{toPersian(row.won)}</td>
-                                      <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{toPersian(row.drawn)}</td>
-                                      <td className="px-2 py-2.5 text-center text-red-400 font-medium">{toPersian(row.lost)}</td>
-                                      <td className={`px-2 py-2.5 text-center ${gd > 0 ? 'text-emerald-500' : gd < 0 ? 'text-red-400' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                        {gd > 0 ? '+' : ''}{toPersian(gd)}
-                                      </td>
-                                      <td className={`px-2 py-2.5 text-center font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{toPersian(row.points)}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
+                                        </td>
+                                        <td>
+                                          <span className="flex items-center gap-1.5">
+                                            {row.teamLogo && (
+                                              <img src={row.teamLogo} alt="" className="h-4 w-4 shrink-0 object-contain" />
+                                            )}
+                                            <span className="max-w-[130px] truncate font-semibold t-soft">{row.teamName}</span>
+                                          </span>
+                                        </td>
+                                        <td className="num text-center">{toPersian(row.played)}</td>
+                                        <td className="num hidden text-center t-accent sm:table-cell">{toPersian(row.won)}</td>
+                                        <td className="num hidden text-center sm:table-cell">{toPersian(row.drawn)}</td>
+                                        <td className="num hidden text-center t-live sm:table-cell">{toPersian(row.lost)}</td>
+                                        <td
+                                          className={`num text-center font-semibold ${
+                                            gd > 0 ? 't-accent' : gd < 0 ? 't-live' : 't-muted'
+                                          }`}
+                                        >
+                                          {gd > 0 ? '+' : ''}
+                                          {toPersian(gd)}
+                                        </td>
+                                        <td className="num pts text-center">{toPersian(row.points)}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
                             {leagueData.standings.some((row) => row.qualificationColor) && (
-                              <div className={`px-4 py-3 border-t text-xs ${darkMode ? 'border-gray-800 text-gray-600' : 'border-gray-100 text-gray-400'}`}>
+                              <p className="border-t border-[var(--line)] px-4 py-2.5 text-[9.5px] t-faint">
                                 رنگ کنار رتبه، سهمیه جدول (قاره‌ای / پلی‌آف / سقوط) را نشان می‌دهد.
-                              </div>
+                              </p>
                             )}
                           </>
-                        )
-                      )}
+                        ))}
 
-                      {activeTab === 'scorers' && (
-                        leagueData.scorers.length === 0 ? (
-                          <p className={`text-center py-6 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>گلزنان این لیگ در دسترس نیست</p>
+                      {activeTab === 'scorers' &&
+                        (leagueData.scorers.length === 0 ? (
+                          <p className="py-8 text-center text-xs t-faint">گلزنان این لیگ در دسترس نیستند</p>
                         ) : (
-                          <div>
+                          <div className="divide-hair">
                             {leagueData.scorers.slice(0, 20).map((scorer, i) => (
-                              <div key={scorer.playerId} className={`flex items-center gap-3 px-4 py-3 border-b last:border-b-0 ${
-                                darkMode ? 'border-gray-800/60 hover:bg-gray-800/40' : 'border-gray-50 hover:bg-gray-50'
-                              } transition-colors`}>
-                                <span className={`text-sm font-black w-6 text-center tabular-nums ${
-                                  i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-amber-600' : darkMode ? 'text-gray-700' : 'text-gray-300'
-                                }`}>{toPersian(i + 1)}</span>
+                              <div key={scorer.playerId} className="flex items-center gap-3 px-3.5 py-2.5">
+                                <span
+                                  className={`display w-5 text-center text-lg ${
+                                    i === 0 ? 't-gold' : i === 1 ? 't-muted' : i === 2 ? 'text-[var(--bronze)]' : 't-faint'
+                                  }`}
+                                >
+                                  {toPersian(i + 1)}
+                                </span>
                                 {scorer.portrait ? (
-                                  <img src={scorer.portrait} alt="" className="w-8 h-8 rounded-full object-cover bg-gray-700 flex-shrink-0" />
+                                  <img
+                                    src={scorer.portrait}
+                                    alt=""
+                                    className="h-8 w-8 shrink-0 rounded-full bg-[var(--surface-2)] object-cover"
+                                  />
                                 ) : scorer.teamLogo ? (
-                                  <img src={scorer.teamLogo} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
+                                  <img src={scorer.teamLogo} alt="" className="h-7 w-7 shrink-0 object-contain" />
                                 ) : (
-                                  <span className="text-xl">⚽</span>
+                                  <span className="crest-frame h-8 w-8 !rounded-full text-xs">⚽</span>
                                 )}
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-semibold truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{scorer.name}</p>
-                                  <p className={`text-xs truncate ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{scorer.teamName}</p>
+                                <div className="min-w-0 flex-1">
+                                  <p className="t-ink truncate text-[12px] font-bold">{scorer.name}</p>
+                                  <p className="truncate text-[10px] t-faint">{scorer.teamName}</p>
                                 </div>
-                                <div className="flex items-center gap-3 text-xs font-bold flex-shrink-0">
-                                  <span className="text-emerald-500">{toPersian(scorer.goals)} ⚽</span>
-                                  {scorer.assists > 0 && <span className={darkMode ? 'text-blue-400' : 'text-blue-500'}>{toPersian(scorer.assists)} 🎯</span>}
+                                <div className="flex shrink-0 items-baseline gap-2.5">
+                                  <span className="num t-ink text-sm font-black">{toPersian(scorer.goals)}</span>
+                                  <span className="text-[9px] t-faint">گل</span>
+                                  {scorer.assists > 0 && (
+                                    <span className="num text-[10px] font-bold t-blue">{toPersian(scorer.assists)} پاس</span>
+                                  )}
                                 </div>
                               </div>
                             ))}
                           </div>
-                        )
-                      )}
+                        ))}
 
                       {activeTab === 'matches' && (
                         <div>
                           {leagueData.rounds.length > 0 && (
-                            <div className={`flex gap-2 overflow-x-auto px-4 py-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
+                            <div className="scroll-x flex gap-2 border-b border-[var(--line)] px-3 py-2.5">
                               {leagueData.rounds.map((entry, i) => (
                                 <button
                                   key={entry.round + i}
                                   onClick={() => setRound(i)}
-                                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                                    round === i
-                                      ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white'
-                                      : darkMode ? 'bg-gray-800 text-gray-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                  }`}
+                                  className={`chip ${round === i ? 'chip-on' : ''}`}
                                 >
                                   {toPersian(entry.round)}
                                 </button>
@@ -354,101 +366,98 @@ export default function Leagues() {
                           )}
                           {(() => {
                             const rows = leagueData.rounds.length
-                              ? (leagueData.rounds[round]?.matches ?? [])
+                              ? leagueData.rounds[round]?.matches ?? []
                               : leagueData.matches;
                             if (rows.length === 0) {
-                              return (
-                                <p className={`text-center py-6 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                                  بازی‌ای برای این لیگ ثبت نشده است
-                                </p>
-                              );
+                              return <p className="py-8 text-center text-xs t-faint">بازی‌ای برای این لیگ ثبت نشده است</p>;
                             }
-                            return rows.map((match) => (
-                              <div
-                                key={match.id}
-                                onClick={() => navigate(`/match/${league.id}~${match.id}`)}
-                                className={`flex items-center gap-2 px-4 py-3 cursor-pointer border-b last:border-b-0 transition-colors ${
-                                  darkMode ? 'border-gray-800/60 hover:bg-gray-800/40' : 'border-gray-50 hover:bg-gray-50'
-                                } ${match.status === 'live' ? (darkMode ? 'bg-emerald-950/30' : 'bg-emerald-50/60') : ''}`}
-                              >
-                                <div className="flex-1 flex items-center justify-end gap-1.5 min-w-0">
-                                  <span className={`text-xs font-semibold truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{match.home.name}</span>
-                                  {match.home.logo && <img src={match.home.logo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />}
-                                </div>
-                                <div className="flex flex-col items-center min-w-[72px]">
-                                  {match.status === 'upcoming' || match.homeScore === null || match.awayScore === null ? (
-                                    <>
-                                      <span className={`text-xs font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{match.time}</span>
-                                      <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{match.persianDate}</span>
-                                    </>
-                                  ) : (
-                                    <span className={`text-sm font-black tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                                      {toPersian(match.homeScore)} - {toPersian(match.awayScore)}
-                                    </span>
-                                  )}
-                                  {match.status === 'live' ? (
-                                    <span className="flex items-center gap-1 text-xs text-red-400">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 live-pulse" />
-                                      {toPersian(match.minute)}′
-                                    </span>
-                                  ) : (
-                                    <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                                      {match.statusText || (match.status === 'upcoming' ? 'برگزار نشده' : 'پایان')}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex-1 flex items-center gap-1.5 min-w-0">
-                                  {match.away.logo && <img src={match.away.logo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />}
-                                  <span className={`text-xs font-semibold truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{match.away.name}</span>
-                                </div>
+                            return (
+                              <div className="divide-hair">
+                                {rows.map((match) => (
+                                  <div
+                                    key={match.id}
+                                    onClick={() => navigate(`/match/${league.id}~${match.id}`)}
+                                    className={`flex cursor-pointer items-center gap-2 px-3.5 py-3 transition-colors hover:bg-[var(--surface-2)] ${
+                                      match.status === 'live' ? 'bg-[var(--live-soft)]' : ''
+                                    }`}
+                                  >
+                                    <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+                                      <span className="truncate text-[11px] font-semibold t-soft">{match.home.name}</span>
+                                      {match.home.logo && (
+                                        <img src={match.home.logo} alt="" className="h-5 w-5 shrink-0 object-contain" />
+                                      )}
+                                    </div>
+                                    <div className="flex min-w-[68px] flex-col items-center gap-0.5">
+                                      {match.status === 'upcoming' || match.homeScore === null || match.awayScore === null ? (
+                                        <>
+                                          <span className="num text-[11px] font-bold t-ink">{match.time}</span>
+                                          <span className="text-[9px] t-faint">{match.persianDate}</span>
+                                        </>
+                                      ) : (
+                                        <span className="num text-sm font-black t-ink">
+                                          {toPersian(match.homeScore)} - {toPersian(match.awayScore)}
+                                        </span>
+                                      )}
+                                      {match.status === 'live' ? (
+                                        <span className="flex items-center gap-1 text-[9px] font-bold t-live">
+                                          <span className="live-dot !h-[5px] !w-[5px]" />
+                                          <span className="num">{toPersian(match.minute)}′</span>
+                                        </span>
+                                      ) : (
+                                        <span className="text-[9px] t-faint">
+                                          {match.statusText || (match.status === 'upcoming' ? 'برگزار نشده' : 'پایان')}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                      {match.away.logo && (
+                                        <img src={match.away.logo} alt="" className="h-5 w-5 shrink-0 object-contain" />
+                                      )}
+                                      <span className="truncate text-[11px] font-semibold t-soft">{match.away.name}</span>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            ));
+                            );
                           })()}
                         </div>
                       )}
 
-                      {activeTab === 'teams' && (
-                        teams.length === 0 ? (
-                          <p className={`text-center py-6 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                            تیم‌های این لیگ در آخرین همگام‌سازی نبوده‌اند
-                          </p>
+                      {activeTab === 'teams' &&
+                        (teams.length === 0 ? (
+                          <p className="py-8 text-center text-xs t-faint">تیم‌های این لیگ در آخرین همگام‌سازی نبوده‌اند</p>
                         ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-4">
+                          <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
                             {teams.map((team) => (
-                              <div
-                                key={team.id}
-                                className={`flex items-center gap-2 p-2 rounded-xl transition-colors ${
-                                  darkMode ? 'bg-gray-800/60' : 'bg-gray-50'
-                                }`}
-                              >
+                              <div key={team.id} className="inset flex items-center gap-2 p-2.5">
                                 {team.logo ? (
-                                  <img src={team.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
+                                  <img src={team.logo} alt="" className="h-6 w-6 shrink-0 object-contain" />
                                 ) : (
                                   <span className="text-lg">🛡️</span>
                                 )}
                                 <div className="min-w-0">
-                                  <p className={`text-xs font-semibold truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{team.name}</p>
-                                  <p className={`text-xs truncate ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                                  <p className="t-soft truncate text-[11px] font-bold">{team.name}</p>
+                                  <p className="num truncate text-[9.5px] t-faint">
                                     رتبه {toPersian(team.rank)} · {toPersian(team.points)} امتیاز
                                   </p>
                                 </div>
                               </div>
                             ))}
                           </div>
-                        )
-                      )}
+                        ))}
                     </>
                   )}
                 </div>
               )}
-            </div>
+            </article>
           );
         })}
 
         {visible.length === 0 && (
-          <div className={`text-center py-16 rounded-2xl ${darkMode ? 'bg-gray-900 text-gray-500' : 'bg-gray-50 text-gray-400'}`}>
-            <div className="text-4xl mb-3">🔍</div>
-            <p>لیگی با این نام پیدا نشد</p>
+          <div className="plate p-12 text-center">
+            <span className="crest-frame mx-auto mb-3 flex h-12 w-12 text-lg">🏆</span>
+            <p className="display t-muted text-2xl">لیگی با این نام پیدا نشد</p>
+            <p className="mt-1 text-[11px] t-faint">عبارت جستجو یا فیلتر را تغییر دهید</p>
           </div>
         )}
       </div>

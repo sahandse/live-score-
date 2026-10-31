@@ -1,61 +1,57 @@
 import { useState } from 'react';
 import { Settings } from 'lucide-react';
 import { usePersianDateTime } from '../hooks/usePersianDate';
-import { useApp } from '../context/AppContext';
 import SettingsPanel from './SettingsPanel';
 
 export default function Header() {
   const { timeString, dateString, dayName } = usePersianDateTime();
-  const { darkMode } = useApp();
   const [showSettings, setShowSettings] = useState(false);
 
   return (
     <>
-      <header className={`sticky top-0 z-40 backdrop-blur-xl border-b ${
-        darkMode ? 'bg-gray-950/90 border-gray-800' : 'bg-white/90 border-gray-200'
-      }`}>
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 via-blue-600 to-purple-600 flex items-center justify-center shadow-lg">
-                <span className="text-white text-lg">⚽</span>
-              </div>
-              <div>
-                <h1 className={`text-base font-black leading-none ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  لایو اسکور
-                </h1>
-                <p className={`text-[10px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>نتایج زنده فوتبال</p>
-              </div>
+      <header className="topbar">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 md:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 32 32" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="16" cy="16" r="12.5" />
+                <path d="M16 10.2l4.6 3.4-1.8 5.4h-5.6l-1.8-5.4z" fill="currentColor" stroke="none" />
+                <path d="M16 3.5v6.7M6.3 12.3l6 1.3M25.7 12.3l-6 1.3M10.6 28l3.4-6.1M21.4 28l-3.4-6.1" strokeLinecap="round" />
+              </svg>
             </div>
-
-            {/* Persian Date — desktop */}
-            <div className={`hidden md:flex flex-col items-center px-3 py-1.5 rounded-xl ${
-              darkMode ? 'bg-gray-800/60' : 'bg-gray-100'
-            }`}>
-              <span className={`text-base font-bold tabular-nums ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>{timeString}</span>
-              <span className={`text-[10px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{dayName}، {dateString}</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="display t-ink text-[27px] leading-none">لایو اسکور</h1>
+                <span className="hidden h-[18px] items-center rounded-[5px] border border-[var(--line-strong)] px-1.5 text-[8px] font-bold tracking-[0.22em] t-faint sm:inline-flex">
+                  LIVE
+                </span>
+              </div>
+              <p className="kicker mt-1 truncate">فوتبال ایران و جهان</p>
             </div>
+          </div>
 
-            {/* Settings */}
-            <button
-              onClick={() => setShowSettings(true)}
-              className={`p-2.5 rounded-xl transition-all ${
-                darkMode ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Settings size={20} />
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="hidden items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 md:flex">
+              <span className="kicker hidden lg:inline">TEHRAN</span>
+              <span className="num t-ink text-[17px] font-extrabold leading-none">{timeString}</span>
+              <span className="h-6 w-px bg-[var(--line)]" />
+              <span className="text-[10px] t-muted">
+                {dayName} · {dateString}
+              </span>
+            </div>
+            <button onClick={() => setShowSettings(true)} className="iconbtn" aria-label="تنظیمات">
+              <Settings size={18} />
             </button>
           </div>
+        </div>
 
-          {/* Mobile Date */}
-          <div className={`md:hidden flex items-center justify-center gap-2 mt-2 pt-2 border-t text-xs ${
-            darkMode ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'
-          }`}>
-            <span className={`font-bold ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>{timeString}</span>
-            <span>•</span>
-            <span>{dayName}، {dateString}</span>
-          </div>
+        <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 px-4 pb-2 text-[10px] t-muted md:hidden">
+          <span className="h-1 w-1 rounded-full bg-[var(--accent)]" />
+          <span className="num t-soft font-bold">{timeString}</span>
+          <span className="t-faint">|</span>
+          <span>
+            {dayName} · {dateString}
+          </span>
         </div>
       </header>
 

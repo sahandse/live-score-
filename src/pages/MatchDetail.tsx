@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, RefreshCw } from 'lucide-react';
-import { useApp } from '../context/AppContext';
 import { toPersian } from '../hooks/usePersianDate';
 import {
   getFeedMatchDetail,
@@ -51,7 +50,6 @@ const groupByLine = (players: FeedLineupPlayer[]) => {
 export default function MatchDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { darkMode } = useApp();
   const [detail, setDetail] = useState<FeedMatchDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -102,36 +100,29 @@ export default function MatchDetail() {
 
   const hasScore =
     detail && detail.status !== 'upcoming' && detail.homeScore !== null && detail.awayScore !== null;
-
-  const shell = (children: ReactNode, key?: string) => (
-    <div key={key} className={`rounded-3xl border overflow-hidden mb-4 ${
-      darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'
-    }`}>
-      {children}
-    </div>
-  );
+  const isLive = detail?.status === 'live';
 
   const playerRow = (player: FeedLineupPlayer, accent: string) => (
     <div
       key={`${player.id}_${player.number}`}
-      className={`flex items-center gap-2 px-3 py-2 rounded-xl ${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}
+      className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-[var(--surface-2)]"
     >
-      <span className={`w-7 text-center text-xs font-black tabular-nums ${accent}`}>
+      <span className={`num w-6 shrink-0 text-center text-[11px] font-black ${accent}`}>
         {player.number ? toPersian(player.number) : '·'}
       </span>
       {player.portrait ? (
-        <img src={player.portrait} alt="" className="w-7 h-7 rounded-full object-cover bg-gray-700 flex-shrink-0" />
+        <img src={player.portrait} alt="" className="h-6 w-6 shrink-0 rounded-full bg-[var(--surface-3)] object-cover" />
       ) : (
-        <span className="w-7 h-7 rounded-full bg-gray-700/40 flex-shrink-0" />
+        <span className="h-6 w-6 shrink-0 rounded-full bg-[var(--surface-3)]" />
       )}
-      <span className={`flex-1 text-xs font-medium truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+      <span className="t-soft min-w-0 flex-1 truncate text-[11.5px] font-medium">
         {player.name}
-        {player.isCaptain && <span className="text-yellow-400 mr-1">©</span>}
+        {player.isCaptain && <span className="mr-1 text-[var(--gold)]">©</span>}
       </span>
       {player.rating > 0 && (
         <span
-          className={`text-xs font-bold tabular-nums ${
-            player.rating >= 7.5 ? 'text-emerald-400' : player.rating >= 6.5 ? 'text-gray-400' : 'text-red-400'
+          className={`num text-[10.5px] font-bold ${
+            player.rating >= 7.5 ? 't-accent' : player.rating >= 6.5 ? 't-muted' : 't-live'
           }`}
         >
           {toPersian(player.rating.toFixed(1))}
@@ -141,234 +132,280 @@ export default function MatchDetail() {
   );
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 pb-24 md:pb-6">
+    <div className="page page-narrow">
       <button
         onClick={() => navigate(-1)}
-        className={`flex items-center gap-2 mb-5 text-sm font-medium transition-colors ${
-          darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
-        }`}
+        className="chip reveal mb-4"
       >
-        <ArrowRight size={16} />
+        <ArrowRight size={13} />
         بازگشت
       </button>
 
       {loading ? (
         <div className="space-y-4">
-          {[180, 240].map((height, i) => (
-            <div key={i} className={`rounded-3xl animate-pulse ${darkMode ? 'bg-gray-800' : 'bg-gray-200'}`} style={{ height }} />
-          ))}
+          <div className="skeleton h-[280px]" />
+          <div className="skeleton h-12" />
+          <div className="skeleton h-[220px]" />
         </div>
       ) : !detail ? (
-        <div className={`text-center py-16 rounded-3xl ${darkMode ? 'bg-gray-900 text-gray-500' : 'bg-gray-50 text-gray-400'}`}>
-          <div className="text-5xl mb-4">⚽</div>
-          <p>اطلاعات این بازی در دسترس نیست</p>
-          <p className="text-xs mt-2">این بازی در آخرین همگام‌سازی داده‌ها نبوده است</p>
+        <div className="plate p-12 text-center">
+          <span className="crest-frame mx-auto mb-3 flex h-12 w-12 text-lg">⚽</span>
+          <p className="display t-muted text-2xl">اطلاعات این بازی در دسترس نیست</p>
+          <p className="mt-1 text-[11px] t-faint">این بازی در آخرین همگام‌سازی داده‌ها نبوده است</p>
         </div>
       ) : (
         <>
-          {/* Score card */}
-          <div className={`rounded-3xl border overflow-hidden mb-4 ${
-            detail.status === 'live'
-              ? darkMode ? 'bg-gray-900 border-emerald-900' : 'bg-emerald-50 border-emerald-200'
-              : darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'
-          }`}>
-            <div className={`flex items-center justify-between px-5 py-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
-              <div className="flex items-center gap-2 min-w-0">
-                {detail.leagueLogo && <img src={detail.leagueLogo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />}
-                <span className={`text-sm font-medium truncate ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+          {/* Scoreboard */}
+          <section
+            className={`hero reveal reveal-1 px-4 pb-5 pt-4 md:px-6 ${isLive ? '!border-[color-mix(in_srgb,var(--live)_38%,var(--line))]' : ''}`}
+            aria-label="نتیجه بازی"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] pb-3">
+              <div className="flex min-w-0 items-center gap-2">
+                {detail.leagueLogo && <img src={detail.leagueLogo} alt="" className="h-4 w-4 shrink-0 object-contain" />}
+                <span className="truncate text-[11px] font-semibold t-muted">
                   {detail.leagueName}
-                  {detail.season && <span className={darkMode ? 'text-gray-600' : 'text-gray-400'}> · {toPersian(detail.season)}</span>}
+                  {detail.season && <span className="t-faint"> · {toPersian(detail.season)}</span>}
                 </span>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {detail.status === 'live' && <span className="w-2 h-2 rounded-full bg-red-500 live-pulse" />}
-                <span className={`text-sm font-bold ${
-                  detail.status === 'live' ? 'text-red-400' : detail.status === 'halftime' ? 'text-amber-400' : darkMode ? 'text-gray-500' : 'text-gray-400'
-                }`}>
-                  {detail.status === 'live' ? `${toPersian(detail.minute)}′` : detail.statusText || statusLabel[detail.status]}
-                </span>
+              <div className="flex shrink-0 items-center gap-2">
+                {isLive ? (
+                  <span className="chip chip-live !py-1">
+                    <span className="live-dot" />
+                    <span className="num">{toPersian(detail.minute)}′</span>
+                    زنده
+                  </span>
+                ) : (
+                  <span className={`chip !py-1 ${detail.status === 'halftime' ? 't-gold' : ''}`}>
+                    {detail.statusText || statusLabel[detail.status]}
+                  </span>
+                )}
                 <button
                   onClick={() => fetchMatch(true)}
-                  className={`p-1.5 rounded-lg ${refreshing ? 'animate-spin' : ''} ${darkMode ? 'text-gray-600 hover:text-gray-400' : 'text-gray-400 hover:text-gray-600'}`}
+                  className="iconbtn !h-7 !w-7 !rounded-lg"
                   title="بروزرسانی"
+                  aria-label="بروزرسانی بازی"
                 >
-                  <RefreshCw size={13} />
+                  <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center px-5 py-7">
-              <div className="flex-1 flex flex-col items-center gap-2">
-                {detail.home.logo ? (
-                  <img src={detail.home.logo} alt="" className="w-16 h-16 object-contain" />
-                ) : (
-                  <span className="text-4xl">🏟️</span>
-                )}
-                <p className={`text-sm font-bold text-center leading-tight ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
-                  {detail.home.name}
-                </p>
+            <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-6">
+              <div className="flex min-w-0 flex-col items-center gap-3 text-center">
+                <span className="crest-frame h-14 w-14 !rounded-2xl md:h-[72px] md:w-[72px]">
+                  {detail.home.logo ? (
+                    <img src={detail.home.logo} alt="" className="h-9 w-9 object-contain md:h-11 md:w-11" />
+                  ) : (
+                    <span className="text-xl">🏟️</span>
+                  )}
+                </span>
+                <span className="display t-ink max-w-full truncate text-lg md:text-[22px]">{detail.home.name}</span>
               </div>
 
-              <div className="flex flex-col items-center gap-1 px-4 min-w-[110px]">
+              <div className="flex flex-col items-center gap-2">
                 {hasScore ? (
-                  <div className="flex items-center gap-2">
-                    <span className={`text-4xl font-black tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  <div className="chamfer flex items-center gap-2.5 bg-[var(--ink)] px-4 py-2.5 text-[var(--bg)] md:gap-3 md:px-5 md:py-3">
+                    <span className="num text-[32px] font-black leading-none md:text-[44px]">
                       {toPersian(detail.homeScore ?? 0)}
                     </span>
-                    <span className={`text-2xl font-light ${darkMode ? 'text-gray-600' : 'text-gray-300'}`}>-</span>
-                    <span className={`text-4xl font-black tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                    <span className="text-lg opacity-40 md:text-xl">:</span>
+                    <span className="num text-[32px] font-black leading-none md:text-[44px]">
                       {toPersian(detail.awayScore ?? 0)}
                     </span>
                   </div>
                 ) : (
-                  <span className={`text-3xl font-black ${darkMode ? 'text-gray-600' : 'text-gray-300'}`}>VS</span>
+                  <div className="chamfer border border-dashed border-[var(--line-strong)] px-5 py-3">
+                    <span className="display t-muted text-2xl">VS</span>
+                  </div>
                 )}
-                <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{detail.persianDate}</span>
-                <span className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{detail.time}</span>
+                <span className="num text-[10.5px] font-bold t-soft">{detail.time}</span>
+                <span className="text-[10px] t-faint">{detail.persianDate}</span>
               </div>
 
-              <div className="flex-1 flex flex-col items-center gap-2">
-                {detail.away.logo ? (
-                  <img src={detail.away.logo} alt="" className="w-16 h-16 object-contain" />
-                ) : (
-                  <span className="text-4xl">✈️</span>
-                )}
-                <p className={`text-sm font-bold text-center leading-tight ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
-                  {detail.away.name}
-                </p>
+              <div className="flex min-w-0 flex-col items-center gap-3 text-center">
+                <span className="crest-frame h-14 w-14 !rounded-2xl md:h-[72px] md:w-[72px]">
+                  {detail.away.logo ? (
+                    <img src={detail.away.logo} alt="" className="h-9 w-9 object-contain md:h-11 md:w-11" />
+                  ) : (
+                    <span className="text-xl">✈️</span>
+                  )}
+                </span>
+                <span className="display t-ink max-w-full truncate text-lg md:text-[22px]">{detail.away.name}</span>
               </div>
             </div>
 
             {(detail.stadium || detail.referee) && (
-              <div className={`px-5 py-2.5 border-t flex flex-wrap gap-x-4 gap-y-1 text-xs ${darkMode ? 'border-gray-800 text-gray-500' : 'border-gray-100 text-gray-400'}`}>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-[var(--line)] pt-3 text-[10px] t-muted">
                 {detail.stadium && <span>🏟️ {detail.stadium}</span>}
                 {detail.referee && <span>🧑‍⚖️ داور: {detail.referee}</span>}
               </div>
             )}
-          </div>
+
+            {isLive && (
+              <div className="live-track mt-3">
+                <span style={{ width: `${Math.min(100, ((detail.minute || 0) / 90) * 100)}%` }} />
+              </div>
+            )}
+          </section>
 
           {/* Panels */}
-          <div className={`flex gap-1 p-1 rounded-2xl mb-4 ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
+          <div className="seg reveal reveal-2 mt-4" role="tablist" aria-label="بخش‌های بازی">
             {panels.map(({ key, label, count }) => (
               <button
                 key={key}
+                role="tab"
+                aria-selected={panel === key}
                 onClick={() => setPanel(key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  panel === key
-                    ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg'
-                    : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'
-                }`}
+                className={`seg-item ${panel === key ? 'seg-item-on' : ''}`}
               >
                 {label}
-                {count > 0 && (
-                  <span className={`text-xs px-1.5 rounded-full font-bold ${
-                    panel === key ? 'bg-white/20' : darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-200 text-gray-500'
-                  }`}>{toPersian(count)}</span>
-                )}
+                {count > 0 && <span className="seg-count num">{toPersian(count)}</span>}
               </button>
             ))}
           </div>
 
-          {panel === 'events' && shell(
-            detail.events.length === 0 ? (
-              <p className={`text-center py-8 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>رویدادی ثبت نشده است</p>
-            ) : (
-              <div className="divide-y">
-                {detail.events.map((event, i) => (
-                  <div key={i} className={`flex items-center px-3 py-3 ${darkMode ? 'border-gray-800/60' : 'border-gray-50'}`}>
-                    <div className="flex-1 flex flex-col items-end">
-                      {event.isHome && (
-                        <>
-                          <span className={`text-sm font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{event.player}</span>
-                          {eventCaption(event) && (
-                            <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{eventCaption(event)}</span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 mx-3 min-w-[64px] justify-center">
-                      <span className="text-lg">{eventIcon(event.type)}</span>
-                      <span className={`text-xs font-bold tabular-nums ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{toPersian(event.minute)}′</span>
-                    </div>
-                    <div className="flex-1 flex flex-col items-start">
-                      {!event.isHome && (
-                        <>
-                          <span className={`text-sm font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{event.player}</span>
-                          {eventCaption(event) && (
-                            <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{eventCaption(event)}</span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+          {panel === 'events' && (
+            <section className="plate reveal reveal-3 mt-3 overflow-hidden">
+              <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5">
+                <span className="kicker">TIMELINE</span>
+                <span className="text-[10px] t-faint">{toPersian(detail.events.length)} رویداد</span>
               </div>
-            )
+              {detail.events.length === 0 ? (
+                <div className="px-4 py-12 text-center">
+                  <p className="display t-muted text-xl">رویدادی ثبت نشده است</p>
+                  <p className="mt-1 text-[10px] t-faint">با آغاز بازی، حوادث اینجا نمایش داده می‌شود</p>
+                </div>
+              ) : (
+                <div className="divide-hair">
+                  {detail.events.map((event, i) => (
+                    <div key={i} className="flex items-center px-3 py-2.5 md:px-4">
+                      <div className="flex flex-1 flex-col items-end">
+                        {event.isHome && (
+                          <>
+                            <span className="t-ink text-[12.5px] font-bold">{event.player}</span>
+                            {eventCaption(event) && (
+                              <span className="text-[10px] t-faint">{eventCaption(event)}</span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <div className="mx-3 flex min-w-[72px] items-center justify-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1">
+                        <span className="text-sm leading-none">{eventIcon(event.type)}</span>
+                        <span className="num text-[10.5px] font-bold t-muted">{toPersian(event.minute)}′</span>
+                      </div>
+                      <div className="flex flex-1 flex-col items-start">
+                        {!event.isHome && (
+                          <>
+                            <span className="t-ink text-[12.5px] font-bold">{event.player}</span>
+                            {eventCaption(event) && (
+                              <span className="text-[10px] t-faint">{eventCaption(event)}</span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           )}
 
-          {panel === 'stats' && shell(
-            detail.stats.length === 0 ? (
-              <p className={`text-center py-8 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>آمار این بازی منتشر نشده است</p>
-            ) : (
-              <div className="p-4 space-y-4">
-                {detail.stats.map((stat, i) => {
-                  const total = Math.max(1, stat.homePercent + stat.awayPercent);
-                  const homeWidth = (stat.homePercent / total) * 100;
-                  return (
-                    <div key={i}>
-                      <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className={`font-black tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>{stat.home}</span>
-                        <span className={darkMode ? 'text-gray-500' : 'text-gray-400'}>{stat.title}</span>
-                        <span className={`font-black tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>{stat.away}</span>
-                      </div>
-                      <div className={`flex h-1.5 rounded-full overflow-hidden ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                        <div className="bg-emerald-500 h-full" style={{ width: `${homeWidth}%` }} />
-                        <div className="bg-blue-500 h-full flex-1" />
-                      </div>
-                    </div>
-                  );
-                })}
+          {panel === 'stats' && (
+            <section className="plate reveal reveal-3 mt-3 overflow-hidden">
+              <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5">
+                <span className="kicker">MATCH STATS</span>
+                <span className="text-[10px] t-faint">{toPersian(detail.stats.length)} شاخص</span>
               </div>
-            )
+              {detail.stats.length === 0 ? (
+                <div className="px-4 py-12 text-center">
+                  <p className="display t-muted text-xl">آماری برای این بازی منتشر نشده است</p>
+                  <p className="mt-1 text-[10px] t-faint">پس از پایان بازی دوباره بررسی کنید</p>
+                </div>
+              ) : (
+                <div className="space-y-4 p-4 md:p-5">
+                  {detail.stats.map((stat, i) => {
+                    const total = Math.max(1, stat.homePercent + stat.awayPercent);
+                    const homeWidth = (stat.homePercent / total) * 100;
+                    return (
+                      <div key={i}>
+                        <div className="mb-1.5 flex items-center justify-between text-[11px]">
+                          <span className="num t-ink font-black">{stat.home}</span>
+                          <span className="t-muted">{stat.title}</span>
+                          <span className="num t-ink font-black">{stat.away}</span>
+                        </div>
+                        <div className="flex h-[5px] overflow-hidden rounded-full bg-[var(--surface-3)]">
+                          <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${homeWidth}%` }} />
+                          <div className="h-full flex-1 rounded-full bg-[var(--blue)]" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center justify-center gap-4 border-t border-[var(--line)] pt-3 text-[9.5px] t-faint">
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                      {detail.home.name}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--blue)]" />
+                      {detail.away.name}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </section>
           )}
 
           {panel === 'lineup' && (
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {(['home', 'away'] as const).map((side) => {
                 const starting = side === 'home' ? detail.lineup.homeStarting : detail.lineup.awayStarting;
                 const bench = side === 'home' ? detail.lineup.homeBench : detail.lineup.awayBench;
                 const formation = side === 'home' ? detail.lineup.homeFormation : detail.lineup.awayFormation;
                 const coach = side === 'home' ? detail.lineup.homeCoach : detail.lineup.awayCoach;
                 const team = side === 'home' ? detail.home : detail.away;
-                const accent = side === 'home' ? 'text-emerald-400' : 'text-blue-400';
-                return shell(
-                  <>
-                    <div className={`flex items-center gap-2 px-4 py-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
-                      {team.logo && <img src={team.logo} alt="" className="w-5 h-5 object-contain" />}
-                      <span className={`text-sm font-bold flex-1 truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{team.name}</span>
-                      <span className={`text-xs font-black ${accent}`}>{formation}</span>
+                const accent = side === 'home' ? 't-accent' : 't-blue';
+                return (
+                  <section key={side} className="plate reveal reveal-3 self-start overflow-hidden">
+                    <div className="flex items-center gap-2 border-b border-[var(--line)] px-3.5 py-2.5">
+                      {team.logo && <img src={team.logo} alt="" className="h-5 w-5 shrink-0 object-contain" />}
+                      <span className="t-ink min-w-0 flex-1 truncate text-[12.5px] font-bold">{team.name}</span>
+                      {formation && (
+                        <span className={`num rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-black ${accent}`}>
+                          {formation}
+                        </span>
+                      )}
                     </div>
                     {starting.length === 0 ? (
-                      <p className={`text-center py-8 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                        ترکیب این بازی منتشر نشده است
-                      </p>
+                      <div className="px-4 py-10 text-center">
+                        <p className="display t-muted text-lg">ترکیب این بازی منتشر نشده است</p>
+                        <p className="mt-1 text-[10px] t-faint">معمولاً یک ساعت قبل از بازی اعلام می‌شود</p>
+                      </div>
                     ) : (
                       <div className="p-2">
                         {groupByLine(starting).map((line, lineIndex) => (
-                          <div key={lineIndex}>{line.map((player) => playerRow(player, accent))}</div>
+                          <div key={lineIndex} className={lineIndex > 0 ? 'mt-1 border-t border-[var(--line)] pt-1' : ''}>
+                            {line.map((player) => playerRow(player, accent))}
+                          </div>
                         ))}
-                        <p className={`px-3 pt-3 pb-1 text-xs font-bold ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                          نیمکت {coach ? `· ${coach}` : ''}
-                        </p>
-                        {bench.map((player) => playerRow(player, darkMode ? 'text-gray-500' : 'text-gray-400'))}
+                        <div className="mx-2.5 mt-2 border-t border-[var(--line)] pt-2">
+                          <p className="px-1 pb-1 text-[9.5px] font-bold t-faint">
+                            نیمکت
+                            {coach && <span className="mr-1.5 font-normal">· سرمربی: {coach}</span>}
+                          </p>
+                          {bench.map((player) => playerRow(player, 't-faint'))}
+                        </div>
                       </div>
                     )}
-                  </>,
-                  side
+                  </section>
                 );
               })}
             </div>
           )}
+
+          <p className="mt-5 text-center text-[9.5px] t-faint">
+            داده‌ها از فید زنده همگام‌سازی می‌شوند · ممکن است چند دقیقه تأخیر داشته باشند
+          </p>
         </>
       )}
     </div>

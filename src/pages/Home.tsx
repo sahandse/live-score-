@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Flame, Clock, CheckCircle, RefreshCw, Search, History, X } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { RefreshCw, Search, X } from 'lucide-react';
 import { toPersian } from '../hooks/usePersianDate';
 import MatchCard from '../components/MatchCard';
 import { toPersianTeamName } from '../data/teamNames';
@@ -51,8 +51,20 @@ function toLocalMatch(feed: FeedMatch, provider: Provider): Match {
 const isFinishedLike = (status: Match['status']) =>
   status === 'finished' || status === 'cancelled' || status === 'postponed';
 
+function SectionHead({ index, title, meta }: { index: string; title: string; meta?: ReactNode }) {
+  return (
+    <div className="mb-3 flex items-end justify-between gap-3">
+      <div className="flex min-w-0 items-baseline gap-2.5">
+        <span className="kicker num shrink-0">{index}</span>
+        <h3 className="display t-ink truncate text-2xl md:text-[26px]">{title}</h3>
+      </div>
+      {meta && <div className="shrink-0 text-[10px] t-faint">{meta}</div>}
+    </div>
+  );
+}
+
 export default function Home() {
-  const { darkMode } = useApp();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('live');
   const [searchQuery, setSearchQuery] = useState('');
   const [leagueFilter, setLeagueFilter] = useState<string | null>(null);
@@ -73,7 +85,9 @@ export default function Home() {
 
     const [feed, leagues] = await Promise.all([getMatchFeed({ refresh }), getFeedLeagues()]);
     const order: Record<string, number> = {};
-    leagues.forEach((league) => { order[league.id] = league.priority; });
+    leagues.forEach((league) => {
+      order[league.id] = league.priority;
+    });
     setLeagueOrder(order);
     setProvider(feed.provider);
     setGeneratedAt(feed.generatedAt);
@@ -119,313 +133,475 @@ export default function Home() {
   const allMatches = tab === 'recent' ? recentMatches : matches;
 
   const leagueChips = [
-    ...new Map(
-      matches.map(m => [m.leagueId, { id: m.leagueId, name: m.leagueName, logo: m.leagueLogo }])
-    ).values()
+    ...new Map(matches.map((m) => [m.leagueId, { id: m.leagueId, name: m.leagueName, logo: m.leagueLogo }])).values(),
   ].slice(0, 8);
 
-  const filtered = allMatches.filter(m => {
-    if (tab === 'live') return m.status === 'live' || m.status === 'halftime';
-    if (tab === 'upcoming') return m.status === 'upcoming';
-    if (tab === 'finished') return isFinishedLike(m.status);
-    return true;
-  }).filter(m => {
-    if (leagueFilter && m.leagueId !== leagueFilter) return false;
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.trim().toLowerCase();
-    return (
-      m.homeTeamPersian.includes(searchQuery.trim()) ||
-      m.awayTeamPersian.includes(searchQuery.trim()) ||
-      m.homeTeam.toLowerCase().includes(q) ||
-      m.awayTeam.toLowerCase().includes(q) ||
-      m.leagueName.includes(searchQuery.trim())
-    );
-  });
+  const filtered = allMatches
+    .filter((m) => {
+      if (tab === 'live') return m.status === 'live' || m.status === 'halftime';
+      if (tab === 'upcoming') return m.status === 'upcoming';
+      if (tab === 'finished') return isFinishedLike(m.status);
+      return true;
+    })
+    .filter((m) => {
+      if (leagueFilter && m.leagueId !== leagueFilter) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.trim().toLowerCase();
+      return (
+        m.homeTeamPersian.includes(searchQuery.trim()) ||
+        m.awayTeamPersian.includes(searchQuery.trim()) ||
+        m.homeTeam.toLowerCase().includes(q) ||
+        m.awayTeam.toLowerCase().includes(q) ||
+        m.leagueName.includes(searchQuery.trim())
+      );
+    });
 
   const counts = {
-    live: matches.filter(m => m.status === 'live' || m.status === 'halftime').length,
-    upcoming: matches.filter(m => m.status === 'upcoming').length,
-    finished: matches.filter(m => isFinishedLike(m.status)).length,
+    live: matches.filter((m) => m.status === 'live' || m.status === 'halftime').length,
+    upcoming: matches.filter((m) => m.status === 'upcoming').length,
+    finished: matches.filter((m) => isFinishedLike(m.status)).length,
     recent: recentMatches.length,
   };
 
-  const tabs = [
-    { key: 'live' as Tab, label: 'زنده', icon: Flame, count: counts.live },
-    { key: 'upcoming' as Tab, label: 'آینده', icon: Clock, count: counts.upcoming },
-    { key: 'finished' as Tab, label: 'پایان یافته', icon: CheckCircle, count: counts.finished },
-    { key: 'recent' as Tab, label: 'اخیر', icon: History, count: counts.recent },
+  const liveMatches = useMemo(
+    () => matches.filter((m) => m.status === 'live' || m.status === 'halftime'),
+    [matches]
+  );
+
+  const spotlight = useMemo(() => {
+    const live = liveMatches[0];
+    if (live) return live;
+    const upcoming = matches.find((m) => m.status === 'upcoming');
+    return upcoming ?? matches[0] ?? null;
+  }, [matches, liveMatches]);
+
+  const tabs: { key: Tab; label: string; count: number }[] = [
+    { key: 'live', label: 'زنده', count: counts.live },
+    { key: 'upcoming', label: 'آینده', count: counts.upcoming },
+    { key: 'finished', label: 'پایان یافته', count: counts.finished },
+    { key: 'recent', label: 'اخیر', count: counts.recent },
   ];
 
   const sourceLabel =
     provider === 'varzesh3' ? 'ورزش ۳' : provider === 'espn' ? 'ESPN (پشتیبان)' : 'بدون داده';
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6">
+  const updatedLabel = generatedAt
+    ? new Date(generatedAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' })
+    : new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
 
-      {/* Data source bar */}
-      <div className={`flex items-center justify-between px-4 py-2.5 rounded-2xl mb-4 ${
-        provider === 'varzesh3'
-          ? darkMode ? 'bg-emerald-950/60 border border-emerald-900' : 'bg-emerald-50 border border-emerald-200'
-          : provider === 'espn'
-            ? darkMode ? 'bg-amber-950/50 border border-amber-900' : 'bg-amber-50 border border-amber-200'
-            : darkMode ? 'bg-gray-900 border border-gray-800' : 'bg-gray-50 border border-gray-200'
-      }`}>
-        <div className="flex items-center gap-2 min-w-0">
-          {provider !== 'none' && <span className="w-2 h-2 rounded-full bg-emerald-500 live-pulse flex-shrink-0" />}
-          <span className={`text-xs font-medium truncate ${
-            provider === 'varzesh3'
-              ? darkMode ? 'text-emerald-400' : 'text-emerald-600'
-              : darkMode ? 'text-amber-400' : 'text-amber-600'
-          }`}>
+  const heroUrl = spotlight
+    ? `/match/${spotlight.leagueId ? `${spotlight.leagueId}~${spotlight.id}` : spotlight.id}`
+    : '/';
+  const heroHasScore =
+    spotlight !== null &&
+    spotlight.status !== 'upcoming' &&
+    spotlight.homeScore !== null &&
+    spotlight.awayScore !== null;
+  const heroLive = spotlight?.status === 'live' || spotlight?.status === 'halftime';
+
+  const emptyCopy = searchQuery
+    ? `نتیجه‌ای برای «${searchQuery}» پیدا نشد`
+    : provider === 'none'
+      ? 'هنوز داده‌ای همگام‌سازی نشده است'
+      : tab === 'live'
+        ? 'الان بازی زنده‌ای در جریان نیست'
+        : tab === 'upcoming'
+          ? 'بازی پیش‌رویی ثبت نشده است'
+          : tab === 'finished'
+            ? 'نتیجه‌ای برای نمایش نیست'
+            : 'بازی اخیری وجود ندارد';
+
+  return (
+    <div className="page">
+      <div className="reveal flex items-center justify-between gap-3 text-[10px] t-muted">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
             داده {sourceLabel}
           </span>
-          <span className={`text-xs truncate ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-            · {toPersian(matches.length)} بازی · آخرین بروزرسانی:{' '}
-            {generatedAt
-              ? new Date(generatedAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' })
-              : new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
-          </span>
+          <span className="t-faint">·</span>
+          <span className="num">{toPersian(matches.length)} بازی</span>
+          <span className="hidden t-faint sm:inline">·</span>
+          <span className="hidden sm:inline">بروزرسانی {updatedLabel}</span>
         </div>
         <button
           onClick={() => loadData(true)}
           disabled={loading || refreshing}
-          className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
-            provider === 'varzesh3'
-              ? darkMode ? 'hover:bg-emerald-900/50 text-emerald-500' : 'hover:bg-emerald-100 text-emerald-600'
-              : darkMode ? 'text-gray-600 hover:text-gray-400' : 'text-gray-400 hover:text-gray-600'
-          } ${loading || refreshing ? 'animate-spin' : ''}`}
+          className="iconbtn !h-7 !w-7 !rounded-lg"
           title="بروزرسانی"
+          aria-label="بروزرسانی داده‌ها"
         >
-          <RefreshCw size={13} />
+          <RefreshCw size={12} className={loading || refreshing ? 'animate-spin' : ''} />
         </button>
       </div>
 
-      {/* Hero stats */}
-      <div className="grid grid-cols-4 gap-2.5 mb-5">
-        {[
-          { label: 'زنده', value: counts.live, color: 'from-red-600 to-orange-500', icon: '🔴' },
-          { label: 'کل', value: matches.length, color: 'from-emerald-600 to-teal-500', icon: '⚽' },
-          { label: 'آینده', value: counts.upcoming, color: 'from-blue-600 to-indigo-500', icon: '🔔' },
-          { label: 'نتایج اخیر', value: counts.finished, color: 'from-purple-600 to-pink-500', icon: '📋' },
-        ].map((stat, i) => (
-          <div key={i} className={`rounded-2xl bg-gradient-to-br ${stat.color} p-3 text-white`}>
-            <div className="text-xl mb-0.5">{stat.icon}</div>
-            <div className="text-xl font-black">{toPersian(stat.value)}</div>
-            <div className="text-xs opacity-80">{stat.label}</div>
+      {loading && !localMatches ? (
+        <div className="mt-4 space-y-4">
+          <div className="skeleton h-[290px]" />
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="skeleton h-[74px]" />
+            ))}
           </div>
-        ))}
-      </div>
-
-      {/* Search bar */}
-      <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl mb-3 border ${
-        darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
-      }`}>
-        <Search size={15} className={darkMode ? 'text-gray-600' : 'text-gray-400'} />
-        <input
-          type="text"
-          placeholder="جستجوی تیم یا لیگ..."
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          className={`flex-1 text-sm bg-transparent outline-none ${
-            darkMode ? 'text-gray-200 placeholder:text-gray-700' : 'text-gray-800 placeholder:text-gray-400'
-          }`}
-        />
-        {searchQuery && (
-          <button onClick={() => setSearchQuery('')} className={darkMode ? 'text-gray-600 hover:text-gray-400' : 'text-gray-400 hover:text-gray-600'}>
-            <X size={14} />
-          </button>
-        )}
-      </div>
-
-      {/* League filter chips */}
-      {leagueChips.length > 1 && (
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none">
-          <button
-            onClick={() => setLeagueFilter(null)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              !leagueFilter
-                ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white'
-                : darkMode ? 'bg-gray-800 text-gray-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            همه
-          </button>
-          {leagueChips.map(l => (
-            <button
-              key={l.id}
-              onClick={() => setLeagueFilter(leagueFilter === l.id ? null : l.id)}
-              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                leagueFilter === l.id
-                  ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white'
-                  : darkMode ? 'bg-gray-800 text-gray-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {l.logo
-                ? <img src={l.logo} alt="" className="w-4 h-4 object-contain" />
-                : <span>⚽</span>
-              }
-              <span className="max-w-[90px] truncate">{l.name}</span>
-            </button>
-          ))}
+          <div className="skeleton h-14" />
+          <div className="skeleton h-[92px]" />
+          <div className="skeleton h-[92px]" />
         </div>
-      )}
+      ) : (
+        <>
+          <div className="mt-4 grid items-stretch gap-3 lg:grid-cols-[1.6fr_1fr]">
+            {spotlight && (
+              <section className="hero reveal reveal-1 p-4 md:p-6" aria-label="بازی شاخص">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    {spotlight.leagueLogo ? (
+                      <img src={spotlight.leagueLogo} alt="" className="h-4 w-4 object-contain" />
+                    ) : (
+                      <span className="text-[11px]">⚽</span>
+                    )}
+                    <span className="truncate text-[11px] font-semibold t-muted">{spotlight.leagueName}</span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="kicker hidden sm:inline">MATCHDAY</span>
+                    {spotlight.status === 'live' ? (
+                      <span className="chip chip-live !py-1">
+                        <span className="live-dot" />
+                        <span className="num">{toPersian(spotlight.minute || 0)}′</span>
+                        زنده
+                      </span>
+                    ) : spotlight.status === 'halftime' ? (
+                      <span className="chip chip-live !py-1">نیمه اول</span>
+                    ) : spotlight.status === 'finished' ? (
+                      <span className="chip !py-1">پایان بازی</span>
+                    ) : (
+                      <span className="chip !py-1 num">{spotlight.time}</span>
+                    )}
+                  </div>
+                </div>
 
-      {/* Tabs */}
-      <div className={`flex gap-1 p-1 rounded-2xl mb-5 ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
-        {tabs.map(({ key, label, icon: Icon, count }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-medium transition-all ${
-              tab === key
-                ? 'bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg'
-                : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Icon size={13} />
-            <span>{label}</span>
-            {count > 0 && (
-              <span className={`text-xs px-1 py-0.5 rounded-full font-bold ${
-                tab === key
-                  ? 'bg-white/20 text-white'
-                  : key === 'live'
-                    ? 'bg-red-500 text-white'
-                    : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
-              }`}>{toPersian(count)}</span>
+                <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-4">
+                  <div className="flex min-w-0 flex-col items-center gap-3 text-center">
+                    <span className="crest-frame h-14 w-14 !rounded-2xl md:h-[72px] md:w-[72px]">
+                      {spotlight.homeCrest ? (
+                        <img src={spotlight.homeCrest} alt="" className="h-9 w-9 object-contain md:h-11 md:w-11" />
+                      ) : (
+                        <span className="text-xl">⚽</span>
+                      )}
+                    </span>
+                    <span className="display t-ink max-w-full truncate text-lg md:text-[22px]">
+                      {spotlight.homeTeamPersian}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-2">
+                    {heroHasScore ? (
+                      <div className="chamfer flex items-center gap-2.5 bg-[var(--ink)] px-4 py-2.5 text-[var(--bg)] md:gap-3 md:px-5 md:py-3">
+                        <span className="num text-[32px] font-black leading-none md:text-[44px]">
+                          {toPersian(spotlight.homeScore ?? 0)}
+                        </span>
+                        <span className="text-lg opacity-40 md:text-xl">:</span>
+                        <span className="num text-[32px] font-black leading-none md:text-[44px]">
+                          {toPersian(spotlight.awayScore ?? 0)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="chamfer border border-dashed border-[var(--line-strong)] px-5 py-3">
+                        <span className="display t-muted text-2xl">VS</span>
+                      </div>
+                    )}
+                    <span className="kicker text-center">
+                      {heroLive ? spotlight.statusText || 'در جریان' : spotlight.statusText || 'بازی شاخص'}
+                    </span>
+                  </div>
+
+                  <div className="flex min-w-0 flex-col items-center gap-3 text-center">
+                    <span className="crest-frame h-14 w-14 !rounded-2xl md:h-[72px] md:w-[72px]">
+                      {spotlight.awayCrest ? (
+                        <img src={spotlight.awayCrest} alt="" className="h-9 w-9 object-contain md:h-11 md:w-11" />
+                      ) : (
+                        <span className="text-xl">⚽</span>
+                      )}
+                    </span>
+                    <span className="display t-ink max-w-full truncate text-lg md:text-[22px]">
+                      {spotlight.awayTeamPersian}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] pt-3">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] t-muted">
+                    <span className="num font-bold t-soft">{spotlight.time}</span>
+                    <span className="t-faint">·</span>
+                    <span>{spotlight.date}</span>
+                    {spotlight.status === 'upcoming' && (
+                      <>
+                        <span className="t-faint">·</span>
+                        <span>برگزار نشده</span>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => navigate(heroUrl)}
+                    className="chip chip-on"
+                  >
+                    جزئیات کامل
+                    <span aria-hidden="true">←</span>
+                  </button>
+                </div>
+
+                {spotlight.status === 'live' && (
+                  <div className="live-track mt-3">
+                    <span style={{ width: `${Math.min(100, ((spotlight.minute || 0) / 90) * 100)}%` }} />
+                  </div>
+                )}
+              </section>
             )}
-          </button>
-        ))}
-      </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Matches column */}
-        <div className="space-y-3">
-          {loading && !localMatches ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className={`h-28 rounded-2xl animate-pulse ${darkMode ? 'bg-gray-800' : 'bg-gray-200'}`} />
-            ))
-          ) : filtered.length === 0 ? (
-            <div className={`text-center py-12 rounded-2xl ${darkMode ? 'bg-gray-900 text-gray-500' : 'bg-gray-50 text-gray-400'}`}>
-              <div className="text-4xl mb-3">
-                {searchQuery ? '🔍' : '⚽'}
+            <div className="reveal reveal-2 grid grid-cols-2 gap-3">
+              <div className="stat-tile stat-tile-live">
+                <p className="kicker">زنده</p>
+                <p className="display num mt-2 text-[38px] leading-none t-ink">{toPersian(counts.live)}</p>
+                <p className="mt-1 text-[10px] t-muted">همین حالا</p>
               </div>
-              <p>
-                {searchQuery
-                  ? `نتیجه‌ای برای «${searchQuery}» یافت نشد`
-                  : provider === 'none'
-                    ? 'هنوز داده‌ای همگام‌سازی نشده است'
-                    : 'بازی‌ای در این بخش وجود ندارد'}
-              </p>
+              <div className="stat-tile stat-tile-accent">
+                <p className="kicker">کل بازی‌ها</p>
+                <p className="display num mt-2 text-[38px] leading-none t-ink">{toPersian(matches.length)}</p>
+                <p className="mt-1 text-[10px] t-muted">در فید</p>
+              </div>
+              <div className="stat-tile">
+                <p className="kicker">پیش‌رو</p>
+                <p className="display num mt-2 text-[38px] leading-none t-ink">{toPersian(counts.upcoming)}</p>
+                <p className="mt-1 text-[10px] t-muted">برنامهٔ آینده</p>
+              </div>
+              <div className="stat-tile">
+                <p className="kicker">پایان یافته</p>
+                <p className="display num mt-2 text-[38px] leading-none t-ink">{toPersian(counts.finished)}</p>
+                <p className="mt-1 text-[10px] t-muted">نتیجهٔ نهایی</p>
+              </div>
             </div>
-          ) : (
-            filtered.map(match => <MatchCard key={match.id} match={match} />)
+          </div>
+
+          {liveMatches.length > 0 && (
+            <div className="scroll-x -mx-4 mt-4 flex gap-2 px-4 pb-1 md:mx-0 md:px-0">
+              {liveMatches.slice(0, 10).map((match) => (
+                <button
+                  key={match.id}
+                  onClick={() => navigate(`/match/${match.leagueId ? `${match.leagueId}~${match.id}` : match.id}`)}
+                  className="flex shrink-0 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[11px] transition-colors hover:border-[var(--line-strong)]"
+                >
+                  <span className="live-dot" />
+                  <span className="num font-black t-live">{toPersian(match.minute || 0)}′</span>
+                  <span className="h-3 w-px bg-[var(--line)]" />
+                  <span className="max-w-[72px] truncate t-soft">{match.homeTeamPersian}</span>
+                  <span className="num font-black t-ink">
+                    {toPersian(match.homeScore ?? 0)}–{toPersian(match.awayScore ?? 0)}
+                  </span>
+                  <span className="max-w-[72px] truncate t-soft">{match.awayTeamPersian}</span>
+                </button>
+              ))}
+            </div>
           )}
-        </div>
 
-        {/* Sidebar */}
-        <div className="hidden md:block space-y-4">
-          {/* Standings */}
-          <div className={`rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-            <div className={`flex items-center justify-between px-5 py-4 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
-              <div className="flex items-center gap-2 min-w-0">
-                {standingsLeague?.logo
-                  ? <img src={standingsLeague.logo} alt="" className="w-5 h-5 object-contain" />
-                  : <span>🏆</span>
-                }
-                <h3 className={`font-bold text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                  جدول {standingsLeague?.name ?? 'لیگ'}
-                </h3>
+          <section className="plate reveal reveal-3 mt-5 p-3.5 md:p-4">
+            <div className="flex flex-col gap-2.5 md:flex-row md:items-center">
+              <div className="field md:w-64 md:shrink-0">
+                <Search size={15} className="t-faint shrink-0" />
+                <input
+                  type="text"
+                  placeholder="جستجوی تیم یا لیگ..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="جستجوی بازی"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="t-faint hover:text-[var(--ink-soft)]" aria-label="پاک کردن جستجو">
+                    <X size={14} />
+                  </button>
+                )}
               </div>
-              {provider === 'varzesh3' && (
-                <span className="text-xs text-emerald-400 flex items-center gap-1 flex-shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 live-pulse" />زنده
-                </span>
-              )}
-            </div>
-            {!apiStandings || apiStandings.length === 0 ? (
-              <p className={`text-center py-6 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>جدول در دسترس نیست</p>
-            ) : (
-              <>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className={darkMode ? 'text-gray-600' : 'text-gray-400'}>
-                      <th className="px-3 py-2 text-right">#</th>
-                      <th className="px-3 py-2 text-right">تیم</th>
-                      <th className="px-2 py-2 text-center">ب</th>
-                      <th className="px-2 py-2 text-center text-emerald-500">B</th>
-                      <th className="px-2 py-2 text-center">M</th>
-                      <th className="px-2 py-2 text-center text-red-400">B</th>
-                      <th className="px-2 py-2 text-center font-bold">ام</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {apiStandings.map((row) => (
-                      <tr key={row.teamId} className={`border-t transition-colors ${darkMode ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-50 hover:bg-gray-50'}`}>
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-1 justify-end">
-                            <span className={`font-bold ${row.rank <= 4 ? 'text-emerald-500' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{toPersian(row.rank)}</span>
-                            {row.qualificationColor && (
-                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: row.qualificationColor }} />
-                            )}
-                          </div>
-                        </td>
-                        <td className={`px-3 py-2.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                          <div className="flex items-center gap-1.5">
-                            {row.teamLogo && <img src={row.teamLogo} alt="" className="w-4 h-4 object-contain" />}
-                            <span className="font-medium truncate max-w-[90px]">{row.teamName}</span>
-                          </div>
-                        </td>
-                        <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{toPersian(row.played)}</td>
-                        <td className="px-2 py-2.5 text-center text-emerald-500 font-medium">{toPersian(row.won)}</td>
-                        <td className={`px-2 py-2.5 text-center ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{toPersian(row.drawn)}</td>
-                        <td className="px-2 py-2.5 text-center text-red-400 font-medium">{toPersian(row.lost)}</td>
-                        <td className={`px-2 py-2.5 text-center font-black ${darkMode ? 'text-white' : 'text-gray-900'}`}>{toPersian(row.points)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className={`px-4 py-2.5 flex flex-wrap gap-3 text-xs border-t ${darkMode ? 'border-gray-800 text-gray-600' : 'border-gray-100 text-gray-400'}`}>
-                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />سهمیه قاره‌ای</span>
-                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />سقوط</span>
-                </div>
-              </>
-            )}
-          </div>
 
-          {/* Top Scorers */}
-          <div className={`rounded-2xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-            <div className={`flex items-center gap-2 px-5 py-4 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}>
-              <span>⚽</span>
-              <h3 className={`font-bold text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                گلزنان برتر — {standingsLeague?.name ?? 'لیگ'}
-              </h3>
+              <div className="seg flex-1">
+                {tabs.map(({ key, label, count }) => (
+                  <button
+                    key={key}
+                    onClick={() => setTab(key)}
+                    className={`seg-item ${tab === key ? 'seg-item-on' : ''}`}
+                  >
+                    {label}
+                    {count > 0 && <span className="seg-count num">{toPersian(count)}</span>}
+                  </button>
+                ))}
+              </div>
             </div>
-            {!apiScorers || apiScorers.length === 0 ? (
-              <p className={`text-center py-6 text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>گلزنان در دسترس نیست</p>
-            ) : (
-              apiScorers.map((s, i) => (
-                <div key={s.playerId} className={`flex items-center gap-3 px-4 py-2.5 ${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'} transition-colors`}>
-                  <span className={`text-sm font-black w-6 text-center tabular-nums ${
-                    i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-amber-600' : darkMode ? 'text-gray-700' : 'text-gray-300'
-                  }`}>{toPersian(i + 1)}</span>
-                  {s.portrait || s.teamLogo
-                    ? <img src={s.portrait || s.teamLogo} alt="" className="w-7 h-7 object-contain flex-shrink-0 rounded-full" />
-                    : <span className="text-xl">⚽</span>
-                  }
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-semibold truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{s.name}</p>
-                    <p className={`text-xs truncate ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>{s.teamName}</p>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-bold">
-                    <span className="text-emerald-500">{toPersian(s.goals)} ⚽</span>
-                    {s.assists > 0 && <span className={darkMode ? 'text-blue-400' : 'text-blue-500'}>{toPersian(s.assists)} 🎯</span>}
-                  </div>
-                </div>
-              ))
+
+            {leagueChips.length > 1 && (
+              <div className="scroll-x mt-3 flex gap-2 border-t border-[var(--line)] pt-3">
+                <button
+                  onClick={() => setLeagueFilter(null)}
+                  className={`chip ${!leagueFilter ? 'chip-on' : ''}`}
+                >
+                  همه
+                </button>
+                {leagueChips.map((league) => (
+                  <button
+                    key={league.id}
+                    onClick={() => setLeagueFilter(leagueFilter === league.id ? null : league.id)}
+                    className={`chip ${leagueFilter === league.id ? 'chip-on' : ''}`}
+                  >
+                    {league.logo ? (
+                      <img src={league.logo} alt="" className="h-4 w-4 object-contain" />
+                    ) : (
+                      <span>⚽</span>
+                    )}
+                    <span className="max-w-[92px] truncate">{league.name}</span>
+                  </button>
+                ))}
+              </div>
             )}
+          </section>
+
+          <div className="mt-7 grid items-start gap-7 lg:grid-cols-[1.55fr_1fr]">
+            <section className="reveal reveal-4">
+              <SectionHead index="۰۱" title="بازی‌ها" meta={`${toPersian(filtered.length)} بازی`} />
+              <div className="space-y-2.5">
+                {filtered.length === 0 ? (
+                  <div className="plate p-10 text-center">
+                    <span className="crest-frame mx-auto mb-3 flex h-12 w-12 text-lg">⚽</span>
+                    <p className="display t-muted text-2xl">{emptyCopy}</p>
+                    <p className="mt-1 text-[11px] t-faint">
+                      {provider === 'none' ? 'اسکریپت همگام‌سازی داده را اجرا کنید' : 'فیلتر یا تب دیگری را امتحان کنید'}
+                    </p>
+                  </div>
+                ) : (
+                  filtered.map((match) => <MatchCard key={match.id} match={match} />)
+                )}
+              </div>
+            </section>
+
+            <aside className="space-y-7">
+              <section>
+                <SectionHead
+                  index="۰۲"
+                  title={`جدول ${standingsLeague?.name ?? 'لیگ'}`}
+                  meta={
+                    provider === 'varzesh3' ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="live-dot" />
+                        زنده
+                      </span>
+                    ) : undefined
+                  }
+                />
+                <div className="plate overflow-hidden">
+                  {!apiStandings || apiStandings.length === 0 ? (
+                    <p className="p-8 text-center text-xs t-faint">جدول در دسترس نیست</p>
+                  ) : (
+                    <>
+                      <div className="table-wrap">
+                        <table className="table">
+                          <thead>
+                            <tr>
+                              <th className="w-8 px-3 text-right">#</th>
+                              <th className="text-right">تیم</th>
+                              <th className="text-center">بازی</th>
+                              <th className="text-center">تفاضل</th>
+                              <th className="text-center">امتیاز</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {apiStandings.map((row) => (
+                              <tr key={row.teamId}>
+                                <td className="px-3">
+                                  <span className="flex items-center justify-end gap-1.5">
+                                    {row.qualificationColor && (
+                                      <span
+                                        className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                        style={{ backgroundColor: row.qualificationColor }}
+                                      />
+                                    )}
+                                    <span className="rank">{toPersian(row.rank)}</span>
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="flex items-center gap-1.5">
+                                    {row.teamLogo && <img src={row.teamLogo} alt="" className="h-4 w-4 shrink-0 object-contain" />}
+                                    <span className="max-w-[120px] truncate font-semibold t-soft">{row.teamName}</span>
+                                  </span>
+                                </td>
+                                <td className="num text-center">{toPersian(row.played)}</td>
+                                <td
+                                  className={`num text-center font-semibold ${
+                                    row.goalDifference > 0 ? 't-accent' : row.goalDifference < 0 ? 't-live' : 't-muted'
+                                  }`}
+                                >
+                                  {row.goalDifference > 0 ? '+' : ''}
+                                  {toPersian(row.goalDifference)}
+                                </td>
+                                <td className="num pts text-center">{toPersian(row.points)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="flex items-center gap-3 border-t border-[var(--line)] px-3 py-2.5 text-[9.5px] t-faint">
+                        <span className="flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                          سهمیه
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[var(--live)]" />
+                          سقوط
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </section>
+
+              <section>
+                <SectionHead index="۰۳" title="گلزنان برتر" meta={standingsLeague?.name} />
+                <div className="plate divide-hair overflow-hidden">
+                  {!apiScorers || apiScorers.length === 0 ? (
+                    <p className="p-8 text-center text-xs t-faint">گلزنان در دسترس نیستند</p>
+                  ) : (
+                    apiScorers.map((scorer, index) => (
+                      <div key={scorer.playerId} className="flex items-center gap-3 px-3.5 py-2.5">
+                        <span
+                          className={`display w-5 text-center ${
+                            index === 0 ? 't-gold' : index === 1 ? 't-muted' : index === 2 ? 'text-[var(--bronze)]' : 't-faint'
+                          } text-lg`}
+                        >
+                          {toPersian(index + 1)}
+                        </span>
+                        {scorer.portrait || scorer.teamLogo ? (
+                          <img
+                            src={scorer.portrait || scorer.teamLogo}
+                            alt=""
+                            className="h-8 w-8 shrink-0 rounded-full bg-[var(--surface-2)] object-contain"
+                          />
+                        ) : (
+                          <span className="crest-frame h-8 w-8 !rounded-full text-xs">⚽</span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="t-ink truncate text-[12px] font-bold">{scorer.name}</p>
+                          <p className="truncate text-[10px] t-faint">{scorer.teamName}</p>
+                        </div>
+                        <div className="flex shrink-0 items-baseline gap-2">
+                          <span className="num t-ink text-[15px] font-black">{toPersian(scorer.goals)}</span>
+                          <span className="text-[9px] t-faint">گل</span>
+                          {scorer.assists > 0 && (
+                            <span className="num text-[10px] font-bold t-blue">{toPersian(scorer.assists)} پاس</span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            </aside>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
