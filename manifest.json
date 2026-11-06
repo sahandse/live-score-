@@ -1,0 +1,45 @@
+{
+  "id": "/live-score-/",
+  "name": "لایو اسکور - نتایج زنده فوتبال",
+  "short_name": "لایو اسکور",
+  "description": "نتایج زنده فوتبال ایران و جهان، جدول لیگ‌ها و آمار بازیکنان",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#070a08",
+  "theme_color": "#070a08",
+  "dir": "rtl",
+  "lang": "fa",
+  "categories": ["sports", "news"],
+  "orientation": "portrait",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "بازی‌های زنده",
+      "short_name": "زنده",
+      "description": "بازی‌های در جریان",
+      "url": "./#/",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "لیگ‌ها",
+      "short_name": "لیگ‌ها",
+      "description": "جدول و برنامه لیگ‌ها",
+      "url": "./#/leagues",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "بازیکنان",
+      "short_name": "بازیکنان",
+      "description": "گلزنان و آمار بازیکنان",
+      "url": "./#/players",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}
